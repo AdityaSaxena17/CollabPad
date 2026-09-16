@@ -1,26 +1,202 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafd;
+  --foreground: #202124;
+  --muted: #5f6368;
+  --border: #dadce0;
+  --brand: #1a73e8;
+  --brand-soft: #e8f0fe;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
 }
 
 body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button:not(:disabled),
+summary,
+select:not(:disabled) {
+  cursor: pointer;
+}
+
+::selection {
+  background: #c2e7ff;
+}
+
+.editor-menu summary {
+  list-style: none;
+}
+
+.editor-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.editor-menu[open] summary {
+  background: #e8eaed;
+}
+
+.document-page {
+  width: min(816px, calc(100vw - 24px));
+  min-height: 1056px;
+}
+
+.ProseMirror {
+  min-height: 912px;
+  padding: 72px 88px 96px;
+  color: #202124;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11pt;
+  line-height: 1.5;
+  outline: none;
+}
+
+.ProseMirror > :first-child {
+  margin-top: 0;
+}
+
+.ProseMirror p {
+  margin: 0 0 0.7rem;
+}
+
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3 {
+  color: #202124;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.ProseMirror h1 {
+  margin: 1.4rem 0 0.8rem;
+  font-size: 2rem;
+}
+
+.ProseMirror h2 {
+  margin: 1.25rem 0 0.65rem;
+  font-size: 1.5rem;
+}
+
+.ProseMirror h3 {
+  margin: 1rem 0 0.55rem;
+  font-size: 1.2rem;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  margin: 0.5rem 0 0.75rem;
+  padding-left: 1.6rem;
+}
+
+.ProseMirror ul {
+  list-style: disc;
+}
+
+.ProseMirror ol {
+  list-style: decimal;
+}
+
+.ProseMirror blockquote {
+  margin: 1rem 0;
+  padding-left: 1rem;
+  border-left: 3px solid #dadce0;
+  color: #5f6368;
+}
+
+.ProseMirror pre {
+  margin: 1rem 0;
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background: #f1f3f4;
+  padding: 0.9rem 1rem;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.9rem;
+}
+
+.ProseMirror a {
+  color: #1a73e8;
+  text-decoration: underline;
+}
+
+.ProseMirror hr {
+  margin: 1.5rem 0;
+  border: 0;
+  border-top: 1px solid #dadce0;
+}
+
+.ProseMirror mark {
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+@media (max-width: 640px) {
+  .ProseMirror {
+    min-height: calc(100vh - 220px);
+    padding: 44px 28px 72px;
+  }
+
+  .document-page {
+    min-height: calc(100vh - 190px);
+  }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  body {
+    background: white;
+  }
+
+  .editor-chrome,
+  .document-ruler,
+  .document-footer {
+    display: none !important;
+  }
+
+  .document-workspace {
+    display: block !important;
+    overflow: visible !important;
+    background: white !important;
+    padding: 0 !important;
+  }
+
+  .document-page {
+    width: 210mm !important;
+    min-height: 297mm !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .ProseMirror {
+    min-height: 297mm;
+    padding: 20mm 22mm;
+  }
 }
