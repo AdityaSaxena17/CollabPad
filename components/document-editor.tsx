@@ -1,6 +1,7 @@
 "use client";
 
 import { UserButton } from "@clerk/nextjs";
+import Collaboration from "@tiptap/extension-collaboration";
 import Highlight from "@tiptap/extension-highlight";
 import TextAlign from "@tiptap/extension-text-align";
 import { TextStyleKit } from "@tiptap/extension-text-style";
@@ -14,6 +15,7 @@ import {
   ArrowLeft,
   Baseline,
   Bold,
+  Cloud,
   CloudOff,
   Highlighter,
   History,
@@ -32,7 +34,6 @@ import {
   Strikethrough,
   Underline,
   Undo2,
-  Users,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -45,10 +46,17 @@ import {
   type ReactNode,
 } from "react";
 import { CollabMark } from "@/components/collab-mark";
-import type { DocumentViewModel } from "@/lib/documents";
+import type { DocumentRecord } from "@/lib/gateway";
+import type * as Y from "yjs";
 
 type DocumentEditorProps = {
-  document: DocumentViewModel;
+  document: DocumentRecord;
+  sharedDocument: Y.Doc;
+  status: "connecting" | "connected" | "disconnected" | "denied";
+  pendingCount: number;
+  isOwner: boolean;
+  onRename: (title: string) => void;
+  onSetSharing: (enabled: boolean) => Promise<void>;
 };
 
 type ToolbarButtonProps = {
@@ -136,11 +144,22 @@ function MenuItem({ label, onSelect, hint, disabled = false }: MenuItemProps) {
   );
 }
 
-/** Renders a local, fully interactive rich-text document editor. */
-export function DocumentEditor({ document }: DocumentEditorProps) {
+/** Renders the shared rich-text editor and the owner's access controls. */
+export function DocumentEditor({
+  document,
+  sharedDocument,
+  status,
+  pendingCount,
+  isOwner,
+  onRename,
+  onSetSharing,
+}: DocumentEditorProps) {
   const router = useRouter();
-  const [title, setTitle] = useState(document.title);
-  const [isDirty, setIsDirty] = useState(false);
+  const [editingTitle, setEditingTitle] = useState<string | null>(null);
+  const [showShare, setShowShare] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareError, setShareError] = useState("");
+  const [copied, setCopied] = useState(false);
   const [zoom, setZoom] = useState(100);
   const [fontFamily, setFontFamily] = useState("Arial");
   const [fontSize, setFontSize] = useState("11");
@@ -153,6 +172,7 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
+        undoRedo: false,
         link: {
           openOnClick: false,
           defaultProtocol: "https",
@@ -165,17 +185,21 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       TextStyleKit,
       Highlight.configure({ multicolor: true }),
+      Collaboration.configure({ document: sharedDocument }),
     ],
-    content: document.content,
     immediatelyRender: false,
-    onUpdate: () => setIsDirty(true),
+    editable: status === "connected",
     editorProps: {
       attributes: {
         "aria-label": "Document content",
         spellcheck: "true",
       },
     },
-  });
+  }, [sharedDocument]);
+
+  useEffect(() => {
+    editor?.setEditable(status === "connected");
+  }, [editor, status]);
 
   const formatting = useEditorState({
     editor,
@@ -241,7 +265,7 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
   });
 
   useEffect(() => {
-    if (!isDirty) {
+    if (pendingCount === 0) {
       return;
     }
 
@@ -252,12 +276,12 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
 
     window.addEventListener("beforeunload", warnAboutUnsavedDraft);
     return () => window.removeEventListener("beforeunload", warnAboutUnsavedDraft);
-  }, [isDirty]);
+  }, [pendingCount]);
 
   function returnToDocuments() {
     if (
-      !isDirty ||
-      window.confirm("This local draft is not saved. Leave the editor anyway?")
+      pendingCount === 0 ||
+      window.confirm("Some changes have not been saved. Leave the editor anyway?")
     ) {
       router.push("/documents");
     }
@@ -296,7 +320,7 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
     event.preventDefault();
     const value = linkValue.trim();
 
-    if (!value || !editor) {
+    if (!value || !editor?.isEditable) {
       setLinkError("Enter a web address.");
       return;
     }
@@ -336,6 +360,29 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
     editor?.chain().focus().unsetAllMarks().clearNodes().run();
   }
 
+  async function changeSharing(enabled: boolean) {
+    if (sharing) return;
+    setSharing(true);
+    setShareError("");
+    try {
+      await onSetSharing(enabled);
+    } catch (cause) {
+      setShareError(cause instanceof Error ? cause.message : "Could not change sharing.");
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function copyShareLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setShareError("");
+    } catch {
+      setShareError("Could not copy the link. Copy it from your browser address bar.");
+    }
+  }
+
   return (
     <main className="flex h-screen min-h-[640px] flex-col overflow-hidden bg-[#f8fafd] text-[#202124]">
       <header className="editor-chrome z-30 shrink-0 border-b border-[#e0e3e7] bg-white px-2 pt-2 sm:px-3">
@@ -361,12 +408,16 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
 
           <div className="min-w-0 flex-1">
             <input
-              value={title}
-              maxLength={120}
+              value={editingTitle ?? document.title}
+              maxLength={200}
               aria-label="Document title"
-              onChange={(event) => {
-                setTitle(event.target.value);
-                setIsDirty(true);
+              disabled={status !== "connected"}
+              onChange={(event) => setEditingTitle(event.target.value)}
+              onBlur={() => {
+                if (editingTitle === null) return;
+                const nextTitle = editingTitle.trim() || "Untitled document";
+                setEditingTitle(null);
+                if (nextTitle !== document.title) onRename(nextTitle);
               }}
               className="block h-7 w-full max-w-[520px] truncate rounded border border-transparent px-1 text-[17px] leading-7 outline-none hover:border-[#dadce0] focus:border-[#1a73e8] sm:text-[18px]"
             />
@@ -378,18 +429,19 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
                 <MenuItem
                   label="Undo"
                   hint="Ctrl+Z"
-                  disabled={!formatting?.canUndo}
+                  disabled={status !== "connected" || !formatting?.canUndo}
                   onSelect={() => editor?.chain().focus().undo().run()}
                 />
                 <MenuItem
                   label="Redo"
                   hint="Ctrl+Y"
-                  disabled={!formatting?.canRedo}
+                  disabled={status !== "connected" || !formatting?.canRedo}
                   onSelect={() => editor?.chain().focus().redo().run()}
                 />
                 <MenuItem
                   label="Select all"
                   hint="Ctrl+A"
+                  disabled={status !== "connected"}
                   onSelect={() => editor?.chain().focus().selectAll().run()}
                 />
               </EditorMenu>
@@ -404,14 +456,15 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
                 ))}
               </EditorMenu>
               <EditorMenu label="Insert">
-                <MenuItem label="Link" hint="Ctrl+K" onSelect={openLinkInput} />
+                <MenuItem label="Link" hint="Ctrl+K" onSelect={openLinkInput} disabled={status !== "connected"} />
                 <MenuItem
                   label="Horizontal line"
+                  disabled={status !== "connected"}
                   onSelect={() => editor?.chain().focus().setHorizontalRule().run()}
                 />
               </EditorMenu>
               <EditorMenu label="Format">
-                <MenuItem label="Clear formatting" onSelect={clearFormatting} />
+                <MenuItem label="Clear formatting" onSelect={clearFormatting} disabled={status !== "connected"} />
               </EditorMenu>
               <EditorMenu label="Tools">
                 <MenuItem label="Grammar correction" hint="Backend required" disabled />
@@ -428,12 +481,8 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
 
           <div className="hidden items-center gap-2 xl:flex">
             <span className="flex items-center gap-1.5 rounded-full bg-[#f1f3f4] px-3 py-2 text-xs text-[#5f6368]">
-              <CloudOff aria-hidden="true" size={14} />
-              Local draft
-            </span>
-            <span className="flex items-center gap-1.5 text-xs text-[#5f6368]">
-              <Users aria-hidden="true" size={15} />
-              Only you
+              {status === "connected" ? <Cloud aria-hidden="true" size={14} /> : <CloudOff aria-hidden="true" size={14} />}
+              {status === "connected" ? "Connected" : "Reconnecting"}
             </span>
           </div>
           <button
@@ -456,19 +505,20 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
           </button>
           <button
             type="button"
-            disabled
-            title="Sharing requires the collaboration backend"
-            className="hidden h-10 items-center gap-2 rounded-full bg-[#c2e7ff] px-4 text-sm font-medium text-[#6f7478] disabled:cursor-not-allowed sm:flex"
+            disabled={!isOwner}
+            title={isOwner ? "Manage sharing" : "Only the document owner can change sharing"}
+            onClick={() => setShowShare(true)}
+            className="flex h-10 items-center gap-2 rounded-full bg-[#c2e7ff] px-3 text-sm font-medium text-[#001d35] hover:bg-[#a8d8f8] disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
           >
             <Share2 aria-hidden="true" size={17} />
-            Share
+            <span className="hidden sm:inline">Share</span>
           </button>
           <div className="mx-1 shrink-0">
             <UserButton />
           </div>
         </div>
 
-        <div className="my-2 flex min-h-10 items-center gap-1 overflow-x-auto rounded-full bg-[#edf2fa] px-2 py-1 [scrollbar-width:thin]">
+        <fieldset disabled={status !== "connected"} className="my-2 flex min-h-10 items-center gap-1 overflow-x-auto rounded-full bg-[#edf2fa] px-2 py-1 [scrollbar-width:thin]">
           <ToolbarButton
             label="Undo"
             icon={Undo2}
@@ -711,8 +761,34 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
             disabled={!editor}
             onClick={clearFormatting}
           />
-        </div>
+        </fieldset>
       </header>
+
+      {showShare && isOwner && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[#202124]/40 px-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="share-heading" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h2 id="share-heading" className="text-lg font-medium">Share this document</h2>
+              <button type="button" onClick={() => setShowShare(false)} aria-label="Close sharing" className="rounded-full p-2 hover:bg-[#f1f3f4]"><X aria-hidden="true" size={18} /></button>
+            </div>
+            <p className="mt-3 text-sm text-[#5f6368]">
+              {document.shareEnabled
+                ? "Anyone signed in with this link can edit."
+                : "Only you can open this document."}
+            </p>
+            <button type="button" disabled={sharing} onClick={() => void changeSharing(!document.shareEnabled)} className="mt-5 rounded-full border border-[#dadce0] px-4 py-2 text-sm font-medium text-[#1967d2] hover:bg-[#e8f0fe] disabled:opacity-50">
+              {sharing ? "Updating…" : document.shareEnabled ? "Turn off link access" : "Allow signed-in editors with link"}
+            </button>
+            {document.shareEnabled && (
+              <div className="mt-5 flex gap-2">
+                <input aria-label="Document link" readOnly value={typeof window === "undefined" ? "" : window.location.href} className="min-w-0 flex-1 rounded-lg border border-[#dadce0] px-3 text-sm" />
+                <button type="button" onClick={() => void copyShareLink()} className="rounded-full bg-[#1a73e8] px-4 py-2 text-sm font-medium text-white">{copied ? "Copied" : "Copy link"}</button>
+              </div>
+            )}
+            {shareError && <p role="alert" className="mt-3 text-sm text-[#b3261e]">{shareError}</p>}
+          </div>
+        </div>
+      )}
 
       {showLinkInput && (
         <div className="editor-chrome z-20 border-b border-[#d2e3fc] bg-[#e8f0fe] px-4 py-3">
@@ -796,9 +872,11 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
         <span className="rounded-full border border-[#dadce0] bg-white/95 px-3 py-1.5 text-xs text-[#5f6368] shadow-sm backdrop-blur">
           {formatting?.wordCount ?? 0} words · {formatting?.characterCount ?? 0} characters
         </span>
-        <span className="flex items-center gap-1.5 rounded-full border border-[#f0d58c] bg-[#fef7e0]/95 px-3 py-1.5 text-xs font-medium text-[#735c0f] shadow-sm backdrop-blur">
-          <CloudOff aria-hidden="true" size={13} />
-          Local draft — not saved
+        <span role="status" className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur ${status === "connected" && pendingCount === 0 ? "border-[#b7dfc4] bg-[#e6f4ea]/95 text-[#137333]" : "border-[#f0d58c] bg-[#fef7e0]/95 text-[#735c0f]"}`}>
+          {status === "connected" ? <Cloud aria-hidden="true" size={13} /> : <CloudOff aria-hidden="true" size={13} />}
+          {status === "connected"
+            ? pendingCount > 0 ? "Saving…" : "Saved"
+            : pendingCount > 0 ? "Reconnecting — changes not saved" : "Reconnecting…"}
         </span>
       </footer>
     </main>

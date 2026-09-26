@@ -1,0 +1,10 @@
+alembic==1.20.0
+asyncpg==0.31.0
+clerk-backend-api==7.0.0
+fastapi==0.141.1
+grpcio==1.84.0
+grpcio-tools==1.84.0
+httpx==0.28.1
+pycrdt==0.14.6
+SQLAlchemy==2.0.54
+uvicorn[standard]==0.54.0

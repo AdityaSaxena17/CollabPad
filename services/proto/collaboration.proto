@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package collabdocs.v1;
+
+service CollaborationService {
+  rpc CreateDocument(CreateDocumentRequest) returns (Document);
+  rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse);
+  rpc GetDocument(GetDocumentRequest) returns (Document);
+  rpc SetSharing(SetSharingRequest) returns (Document);
+  rpc Sync(stream ClientEvent) returns (stream ServerEvent);
+}
+
+message Document {
+  string id = 1;
+  string title = 2;
+  string owner_id = 3;
+  bool share_enabled = 4;
+  string updated_at = 5;
+}
+
+message CreateDocumentRequest {
+  string user_id = 1;
+  string title = 2;
+}
+
+message ListDocumentsRequest {
+  string user_id = 1;
+}
+
+message ListDocumentsResponse {
+  repeated Document documents = 1;
+}
+
+message GetDocumentRequest {
+  string document_id = 1;
+  string user_id = 2;
+}
+
+message SetSharingRequest {
+  string document_id = 1;
+  string user_id = 2;
+  bool enabled = 3;
+}
+
+message Join {
+  string document_id = 1;
+  string user_id = 2;
+}
+
+message Edit {
+  string operation_id = 1;
+  bytes update = 2;
+}
+
+message Rename {
+  string title = 1;
+  string operation_id = 2;
+}
+
+message ClientEvent {
+  oneof event {
+    Join join = 1;
+    Edit edit = 2;
+    Rename rename = 3;
+  }
+}
+
+message Snapshot {
+  bytes update = 1;
+  string title = 2;
+}
+
+message CommittedEdit {
+  string operation_id = 1;
+  bytes update = 2;
+}
+
+message EditAcknowledgement {
+  string operation_id = 1;
+}
+
+message TitleChanged {
+  string title = 1;
+  string operation_id = 2;
+}
+
+message AccessRevoked {}
+
+message ServerEvent {
+  oneof event {
+    Snapshot snapshot = 1;
+    CommittedEdit edit = 2;
+    EditAcknowledgement acknowledgement = 3;
+    TitleChanged title_changed = 4;
+    AccessRevoked access_revoked = 5;
+  }
+}
