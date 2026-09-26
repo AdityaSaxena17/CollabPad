@@ -35,7 +35,13 @@ Documents start private. The owner can enable or disable editing by any signed-i
 
 The PostgreSQL `collaboration` schema stores document metadata, an operation log of Yjs updates, and periodic snapshots. Alembic migrations run through the `migrate` Compose job. The single collaboration replica serializes writes per document; adding multiple collaboration replicas requires the later Raft design. The existing `users` and `clerk_webhook_events` tables remain separate and Clerk stays the source of truth for identity. Document ownership uses the verified Clerk user ID, so a delayed webhook does not block a newly signed-in user from creating a document.
 
-Editors become read-only while disconnected. A warning appears when leaving with unacknowledged changes; a full browser refresh before acknowledgement can lose those local changes. Remote presence, AI assistance, version history, Redis presence, and Raft are not implemented in this slice.
+Editors become read-only while disconnected. A warning appears when leaving with unacknowledged changes; a full browser refresh before acknowledgement can lose those local changes. AI assistance, version history, and Raft are not implemented in this slice.
+
+## Presence and live carets
+
+Redis runs privately in Compose; it is not involved in document saves. Each open editor socket has a 45-second Redis presence key, refreshed every 15 seconds while the gateway keeps that socket alive. Clean closes remove the key immediately. Redis Pub/Sub announces joins, leaves, and cursor updates; key-expiry notifications announce crashed connections. A document-scoped index helps find keys, but snapshots check that every presence key still exists and discard stale index entries. These are the only two Redis key types used for presence; Yjs client IDs are not separately reserved. Gateways subscribe before resynchronizing on Redis reconnection, and re-register their still-open sockets after Redis recovery. There is no periodic Redis presence poll.
+
+The document header shows other signed-in editors once per Clerk user; separate tabs retain separate live carets. Names and profile images come from the gateway's Clerk lookup, not from browser claims. JOIN and cursor notifications read one live connection key and send an upsert; LEAVE and expiry notifications send a removal only after confirming that key is gone. Full snapshots are sent on document join and subscriber recovery. When Redis is unavailable, the editor reports presence as unavailable and clears remote carets, while document editing and PostgreSQL saves continue. Redis Pub/Sub and expiry notifications are best-effort, so a missed notification can leave stale presence visible until a full snapshot on rejoin or recovery.
 
 ## Clerk webhook
 
@@ -49,6 +55,7 @@ npx tsc --noEmit
 npm run build
 docker compose config --quiet
 docker compose exec -T collaboration python -m unittest services.tests.test_collaboration services.tests.test_gateway -v
+docker compose exec -T collaboration python -m unittest services.tests.test_presence -v
 ```
 
 The Python tests use synthetic identities and remove their test documents. Real Clerk sign-in, OAuth, and two-browser interaction should also be checked in the configured Clerk application. The gateway rejects unsigned or expired sessions; there is no development authentication bypass.

@@ -6,6 +6,7 @@ import binascii
 import os
 import time
 from contextlib import asynccontextmanager
+from uuid import UUID
 
 import grpc
 import httpx
@@ -15,6 +16,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from services.gateway.presence import LocalConnection, PresenceHub
 from services.proto import collaboration_pb2 as pb
 from services.proto import collaboration_pb2_grpc as rpc
 
@@ -34,9 +36,15 @@ async def lifespan(app: FastAPI):
         )
         app.state.clerk = clerk
         app.state.stub = rpc.CollaborationServiceStub(channel)
+        presence = PresenceHub(clerk)
+        app.state.presence = presence
+        presence_task = asyncio.create_task(presence.run())
         try:
             yield
         finally:
+            presence_task.cancel()
+            await asyncio.gather(presence_task, return_exceptions=True)
+            await presence.close()
             await channel.close()
 
 
@@ -196,6 +204,8 @@ async def document_socket(websocket: WebSocket, document_id: str):
         return
     send_lock = asyncio.Lock()
     expiry = [expires_at]
+    presence_connection: LocalConnection | None = None
+    presence_join_task: asyncio.Task | None = None
 
     async def send(message: dict):
         async with send_lock:
@@ -258,11 +268,29 @@ async def document_socket(websocket: WebSocket, document_id: str):
                         rename=pb.Rename(operation_id=operation_id, title=title)
                     )
                 )
+            elif kind == "awareness":
+                encoded = message.get("update")
+                if not isinstance(encoded, str):
+                    await websocket.close(code=1003)
+                    return
+                # The first cursor can arrive while verified Clerk profile lookup is pending.
+                # The client resends it after presence_ready; document edits never wait here.
+                if presence_connection is None or presence_join_task is None or not presence_join_task.done():
+                    continue
+                try:
+                    update = base64.b64decode(encoded, validate=True)
+                    await websocket.app.state.presence.awareness_update(
+                        presence_connection, update
+                    )
+                except (binascii.Error, ValueError):
+                    await websocket.close(code=1008)
+                    return
             else:
                 await websocket.close(code=1003)
                 return
 
     async def from_collaboration():
+        nonlocal presence_connection, presence_join_task
         try:
             async for event in call:
                 kind = event.WhichOneof("event")
@@ -274,6 +302,17 @@ async def document_socket(websocket: WebSocket, document_id: str):
                             "title": event.snapshot.title,
                         }
                     )
+                    presence_connection = LocalConnection(
+                        document_id=str(UUID(document_id)), user_id=user_id, send=send
+                    )
+
+                    async def join_presence():
+                        await websocket.app.state.presence.resolve_profile(presence_connection)
+                        if presence_connection.active:
+                            await websocket.app.state.presence.register(presence_connection)
+                            await send({"type": "presence_ready"})
+
+                    presence_join_task = asyncio.create_task(join_presence())
                 elif kind == "edit":
                     await send(
                         {
@@ -313,10 +352,17 @@ async def document_socket(websocket: WebSocket, document_id: str):
                 await websocket.close(code=1008)
                 return
 
+    async def refresh_presence():
+        while True:
+            await asyncio.sleep(15)
+            if presence_connection is not None:
+                await websocket.app.state.presence.refresh(presence_connection)
+
     tasks = {
         asyncio.create_task(from_browser()),
         asyncio.create_task(from_collaboration()),
         asyncio.create_task(watch_expiry()),
+        asyncio.create_task(refresh_presence()),
     }
     try:
         _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -324,4 +370,11 @@ async def document_socket(websocket: WebSocket, document_id: str):
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
     finally:
+        if presence_connection is not None:
+            presence_connection.active = False
+        if presence_join_task is not None:
+            presence_join_task.cancel()
+            await asyncio.gather(presence_join_task, return_exceptions=True)
+        if presence_connection is not None:
+            await websocket.app.state.presence.unregister(presence_connection)
         call.cancel()

@@ -2,8 +2,14 @@
 
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Y from "yjs";
+import {
+  Awareness,
+  applyAwarenessUpdate,
+  encodeAwarenessUpdate,
+  removeAwarenessStates,
+} from "y-protocols/awareness";
 import { DocumentEditor } from "@/components/document-editor";
 import {
   gatewayWebSocketUrl,
@@ -17,6 +23,28 @@ type PendingEvent =
   | { type: "rename"; id: string; title: string };
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "denied";
+type PresenceStatus = "loading" | "available" | "unavailable";
+
+export type PresenceConnection = {
+  connectionId: string;
+  userId: string;
+  name: string;
+  imageUrl: string | null;
+  color: string;
+  clientId: number | null;
+  awareness: string | null;
+};
+
+function isPresenceConnection(value: unknown): value is PresenceConnection {
+  return typeof value === "object" && value !== null &&
+    "connectionId" in value && typeof value.connectionId === "string" &&
+    "userId" in value && typeof value.userId === "string" &&
+    "name" in value && typeof value.name === "string" &&
+    "imageUrl" in value && (value.imageUrl === null || typeof value.imageUrl === "string") &&
+    "color" in value && typeof value.color === "string" &&
+    "clientId" in value && (value.clientId === null || typeof value.clientId === "number") &&
+    "awareness" in value && (value.awareness === null || typeof value.awareness === "string");
+}
 
 function encodeUpdate(update: Uint8Array): string {
   return btoa(Array.from(update, (byte) => String.fromCharCode(byte)).join(""));
@@ -34,15 +62,71 @@ export function CollaborativeDocument({ documentId }: { documentId: string }) {
 function DocumentSession({ documentId }: { documentId: string }) {
   const { getToken, isLoaded, userId } = useAuth();
   const ydoc = useMemo(() => new Y.Doc(), []);
+  const awareness = useMemo(() => new Awareness(ydoc), [ydoc]);
+  const awarenessMounts = useRef(0);
   const [document, setDocument] = useState<DocumentRecord | null>(null);
   const [loadError, setLoadError] = useState("");
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [pendingCount, setPendingCount] = useState(0);
+  const [presenceStatus, setPresenceStatus] = useState<PresenceStatus>("loading");
+  const [connections, setConnections] = useState<PresenceConnection[]>([]);
   const socketRef = useRef<WebSocket | null>(null);
   const snapshotReceived = useRef(false);
   const pending = useRef(new Map<string, PendingEvent>());
   const denied = useRef(false);
+  const remoteClientIds = useRef(new Set<number>());
+  const presenceByConnection = useRef(new Map<string, PresenceConnection>());
+  const lastAwarenessSent = useRef(0);
+  const awarenessTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    awarenessMounts.current += 1;
+    return () => {
+      awarenessMounts.current -= 1;
+      // React Strict Mode replays effects; defer destruction to distinguish replay from unmount.
+      setTimeout(() => {
+        if (awarenessMounts.current === 0) awareness.destroy();
+      }, 0);
+    };
+  }, [awareness]);
+
+  const clearRemotePresence = useCallback(() => {
+    removeAwarenessStates(awareness, [...remoteClientIds.current], "remote");
+    remoteClientIds.current.clear();
+    presenceByConnection.current.clear();
+    setConnections([]);
+  }, [awareness]);
+
+  const sendAwareness = useCallback(() => {
+    const socket = socketRef.current;
+    if (socket?.readyState !== WebSocket.OPEN || !snapshotReceived.current) return;
+    if (awareness.getLocalState() === null) return;
+    socket.send(JSON.stringify({
+      type: "awareness",
+      update: encodeUpdate(encodeAwarenessUpdate(awareness, [awareness.clientID])),
+    }));
+    lastAwarenessSent.current = Date.now();
+  }, [awareness]);
+
+  useEffect(() => {
+    function onAwarenessUpdate(
+      changes: { added: number[]; updated: number[]; removed: number[] },
+      origin: unknown,
+    ) {
+      if (origin === "remote") return;
+      if (![...changes.added, ...changes.updated, ...changes.removed].includes(awareness.clientID)) return;
+      if (awarenessTimer.current) clearTimeout(awarenessTimer.current);
+      const delay = Math.max(0, 100 - (Date.now() - lastAwarenessSent.current));
+      awarenessTimer.current = setTimeout(sendAwareness, delay);
+    }
+
+    awareness.on("update", onAwarenessUpdate);
+    return () => {
+      awareness.off("update", onAwarenessUpdate);
+      if (awarenessTimer.current) clearTimeout(awarenessTimer.current);
+    };
+  }, [awareness, sendAwareness]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -102,6 +186,8 @@ function DocumentSession({ documentId }: { documentId: string }) {
         );
         socketRef.current = socket;
         snapshotReceived.current = false;
+        clearRemotePresence();
+        setPresenceStatus("loading");
 
         socket.onopen = () => {
           socket.send(JSON.stringify({ type: "auth", token }));
@@ -135,9 +221,85 @@ function DocumentSession({ documentId }: { documentId: string }) {
               snapshotReceived.current = true;
               setReady(true);
               setStatus("connected");
+              sendAwareness();
               for (const unsaved of pending.current.values()) {
                 socket.send(JSON.stringify(unsaved));
               }
+            } else if (message.type === "presence_snapshot") {
+              if (!("connections" in message) || !Array.isArray(message.connections) ||
+                !message.connections.every(isPresenceConnection)) {
+                clearRemotePresence();
+                setPresenceStatus("unavailable");
+                return;
+              }
+              const activeRemoteIds = new Set<number>();
+              for (const connection of message.connections) {
+                if (connection.clientId === null || connection.clientId === awareness.clientID || !connection.awareness) continue;
+                try {
+                  applyAwarenessUpdate(awareness, decodeUpdate(connection.awareness), "remote");
+                  activeRemoteIds.add(connection.clientId);
+                } catch {
+                  // A malformed ephemeral cursor must not disconnect document editing.
+                }
+              }
+              removeAwarenessStates(
+                awareness,
+                [...remoteClientIds.current].filter((id) => !activeRemoteIds.has(id)),
+                "remote",
+              );
+              remoteClientIds.current = activeRemoteIds;
+              presenceByConnection.current = new Map(
+                message.connections.map((connection) => [connection.connectionId, connection]),
+              );
+              setConnections([...presenceByConnection.current.values()]);
+              setPresenceStatus("available");
+            } else if (message.type === "presence_upsert") {
+              if (!("connection" in message) || !isPresenceConnection(message.connection)) {
+                clearRemotePresence();
+                setPresenceStatus("unavailable");
+                return;
+              }
+              const connection = message.connection;
+              const previous = presenceByConnection.current.get(connection.connectionId);
+              if (previous && previous.clientId !== null && previous.clientId !== awareness.clientID &&
+                previous.clientId !== connection.clientId &&
+                ![...presenceByConnection.current.values()].some((other) =>
+                  other.connectionId !== connection.connectionId && other.clientId === previous.clientId
+                )) {
+                removeAwarenessStates(awareness, [previous.clientId], "remote");
+                remoteClientIds.current.delete(previous.clientId);
+              }
+              presenceByConnection.current.set(connection.connectionId, connection);
+              if (connection.clientId !== null && connection.clientId !== awareness.clientID && connection.awareness) {
+                try {
+                  applyAwarenessUpdate(awareness, decodeUpdate(connection.awareness), "remote");
+                  remoteClientIds.current.add(connection.clientId);
+                } catch {
+                  // Invalid ephemeral awareness must not interrupt document editing.
+                }
+              }
+              setConnections([...presenceByConnection.current.values()]);
+              setPresenceStatus("available");
+            } else if (message.type === "presence_remove") {
+              if (!("connectionId" in message) || typeof message.connectionId !== "string") {
+                clearRemotePresence();
+                setPresenceStatus("unavailable");
+                return;
+              }
+              const previous = presenceByConnection.current.get(message.connectionId);
+              presenceByConnection.current.delete(message.connectionId);
+              if (previous && previous.clientId !== null && previous.clientId !== awareness.clientID &&
+                ![...presenceByConnection.current.values()].some((other) => other.clientId === previous.clientId)) {
+                removeAwarenessStates(awareness, [previous.clientId], "remote");
+                remoteClientIds.current.delete(previous.clientId);
+              }
+              setConnections([...presenceByConnection.current.values()]);
+              setPresenceStatus("available");
+            } else if (message.type === "presence_ready") {
+              sendAwareness();
+            } else if (message.type === "presence_unavailable") {
+              clearRemotePresence();
+              setPresenceStatus("unavailable");
             } else if (message.type === "edit" &&
               "update" in message && typeof message.update === "string") {
               Y.applyUpdate(ydoc, decodeUpdate(message.update), "remote");
@@ -175,6 +337,8 @@ function DocumentSession({ documentId }: { documentId: string }) {
           if (refreshTimer) clearTimeout(refreshTimer);
           if (socketRef.current === socket) socketRef.current = null;
           snapshotReceived.current = false;
+          clearRemotePresence();
+          setPresenceStatus("loading");
           if (!disposed && !denied.current) {
             setStatus("disconnected");
             retryTimer = setTimeout(() => { void connect(); }, 1_500);
@@ -196,7 +360,7 @@ function DocumentSession({ documentId }: { documentId: string }) {
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [documentId, documentLoaded, getToken, isLoaded, userId, ydoc]);
+  }, [awareness, clearRemotePresence, documentId, documentLoaded, getToken, isLoaded, sendAwareness, userId, ydoc]);
 
   function rename(title: string) {
     const event: PendingEvent = { type: "rename", id: crypto.randomUUID(), title };
@@ -239,6 +403,10 @@ function DocumentSession({ documentId }: { documentId: string }) {
     <DocumentEditor
       document={document}
       sharedDocument={ydoc}
+      awareness={awareness}
+      presenceStatus={presenceStatus}
+      connections={connections}
+      currentUserId={userId ?? ""}
       status={status}
       pendingCount={pendingCount}
       isOwner={document.ownerId === userId}

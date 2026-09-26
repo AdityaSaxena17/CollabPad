@@ -154,6 +154,26 @@ select:not(:disabled) {
   padding: 0 1px;
 }
 
+.ProseMirror .collaboration-carets__caret {
+  position: relative;
+  margin-left: -1px;
+  border-left: 2px solid;
+  pointer-events: none;
+}
+
+.ProseMirror .collaboration-carets__label {
+  position: absolute;
+  top: -1.6em;
+  left: -2px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  user-select: none;
+}
+
 @media (max-width: 640px) {
   .ProseMirror {
     min-height: calc(100vh - 220px);
@@ -178,6 +198,11 @@ select:not(:disabled) {
   .editor-chrome,
   .document-ruler,
   .document-footer {
+    display: none !important;
+  }
+
+  .collaboration-carets__caret,
+  .collaboration-carets__selection {
     display: none !important;
   }
 

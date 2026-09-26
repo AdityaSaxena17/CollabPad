@@ -2,6 +2,7 @@
 
 import { UserButton } from "@clerk/nextjs";
 import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import Highlight from "@tiptap/extension-highlight";
 import TextAlign from "@tiptap/extension-text-align";
 import { TextStyleKit } from "@tiptap/extension-text-style";
@@ -37,6 +38,7 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   useEffect,
@@ -46,13 +48,19 @@ import {
   type ReactNode,
 } from "react";
 import { CollabMark } from "@/components/collab-mark";
+import type { PresenceConnection } from "@/components/collaborative-document";
 import type { DocumentRecord } from "@/lib/gateway";
 import type * as Y from "yjs";
+import type { Awareness } from "y-protocols/awareness";
 
 type DocumentEditorProps = {
   document: DocumentRecord;
   sharedDocument: Y.Doc;
+  awareness: Awareness;
   status: "connecting" | "connected" | "disconnected" | "denied";
+  presenceStatus: "loading" | "available" | "unavailable";
+  connections: PresenceConnection[];
+  currentUserId: string;
   pendingCount: number;
   isOwner: boolean;
   onRename: (title: string) => void;
@@ -148,7 +156,11 @@ function MenuItem({ label, onSelect, hint, disabled = false }: MenuItemProps) {
 export function DocumentEditor({
   document,
   sharedDocument,
+  awareness,
   status,
+  presenceStatus,
+  connections,
+  currentUserId,
   pendingCount,
   isOwner,
   onRename,
@@ -186,6 +198,10 @@ export function DocumentEditor({
       TextStyleKit,
       Highlight.configure({ multicolor: true }),
       Collaboration.configure({ document: sharedDocument }),
+      CollaborationCaret.configure({
+        provider: { awareness },
+        user: { name: "You", color: "#0b57d0" },
+      }),
     ],
     immediatelyRender: false,
     editable: status === "connected",
@@ -195,7 +211,15 @@ export function DocumentEditor({
         spellcheck: "true",
       },
     },
-  }, [sharedDocument]);
+  }, [sharedDocument, awareness]);
+
+  const remoteUsers = [
+    ...new Map(
+      connections
+        .filter((connection) => connection.userId !== currentUserId)
+        .map((connection) => [connection.userId, connection]),
+    ).values(),
+  ];
 
   useEffect(() => {
     editor?.setEditable(status === "connected");
@@ -485,6 +509,30 @@ export function DocumentEditor({
               {status === "connected" ? "Connected" : "Reconnecting"}
             </span>
           </div>
+          {presenceStatus === "unavailable" ? (
+            <span role="status" className="hidden text-xs text-[#735c0f] sm:inline">Presence unavailable</span>
+          ) : presenceStatus === "available" ? (
+            <div className="flex shrink-0 items-center -space-x-2" aria-label={`${remoteUsers.length} other editors online`}>
+              {remoteUsers.slice(0, 4).map((member) => (
+                <span
+                  key={member.userId}
+                  title={member.name}
+                  aria-label={`${member.name} is editing`}
+                  className="relative grid size-8 place-items-center overflow-hidden rounded-full border-2 border-white text-xs font-semibold text-white"
+                  style={{ backgroundColor: member.color }}
+                >
+                  {member.imageUrl ? (
+                    <Image src={member.imageUrl} alt="" width={32} height={32} unoptimized className="size-full object-cover" />
+                  ) : member.name.slice(0, 1).toLocaleUpperCase()}
+                </span>
+              ))}
+              {remoteUsers.length > 4 && (
+                <span className="relative grid size-8 place-items-center rounded-full border-2 border-white bg-[#5f6368] text-xs text-white">
+                  +{remoteUsers.length - 4}
+                </span>
+              )}
+            </div>
+          ) : null}
           <button
             type="button"
             disabled

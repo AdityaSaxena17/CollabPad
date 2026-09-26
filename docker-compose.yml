@@ -49,15 +49,26 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--notify-keyspace-events", "Ex"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   gateway:
     build:
       context: .
       dockerfile: services/Dockerfile
-    command: ["uvicorn", "services.gateway.main:app", "--host", "0.0.0.0", "--port", "8000", "--ws-max-size", "2097152"]
+    command: ["uvicorn", "services.gateway.main:app", "--host", "0.0.0.0", "--port", "8000", "--ws-max-size", "2097152", "--ws-ping-interval", "15", "--ws-ping-timeout", "15"]
     environment:
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       COLLABORATION_TARGET: collaboration:50051
+      REDIS_URL: redis://redis:6379/0
     ports:
       - "${GATEWAY_PORT:-18080}:8000"
     depends_on:
