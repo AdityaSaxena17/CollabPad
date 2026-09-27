@@ -24,6 +24,9 @@ type PendingEvent =
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "denied";
 type PresenceStatus = "loading" | "available" | "unavailable";
+const EDIT_IDLE_MS = 50;
+const EDIT_MAX_WAIT_MS = 200;
+const MAX_BATCH_BYTES = 128 * 1024;
 
 export type PresenceConnection = {
   connectionId: string;
@@ -74,6 +77,10 @@ function DocumentSession({ documentId }: { documentId: string }) {
   const socketRef = useRef<WebSocket | null>(null);
   const snapshotReceived = useRef(false);
   const pending = useRef(new Map<string, PendingEvent>());
+  const bufferedUpdates = useRef<Uint8Array[]>([]);
+  const bufferedBytes = useRef(0);
+  const editIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editMaxWaitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const denied = useRef(false);
   const remoteClientIds = useRef(new Set<number>());
   const presenceByConnection = useRef(new Map<string, PresenceConnection>());
@@ -108,6 +115,29 @@ function DocumentSession({ documentId }: { documentId: string }) {
     }));
     lastAwarenessSent.current = Date.now();
   }, [awareness]);
+
+  const flushEdits = useCallback(() => {
+    if (editIdleTimer.current) clearTimeout(editIdleTimer.current);
+    if (editMaxWaitTimer.current) clearTimeout(editMaxWaitTimer.current);
+    editIdleTimer.current = null;
+    editMaxWaitTimer.current = null;
+    if (bufferedUpdates.current.length === 0) return;
+
+    const update = Y.mergeUpdates(bufferedUpdates.current);
+    bufferedUpdates.current = [];
+    bufferedBytes.current = 0;
+    const event: PendingEvent = {
+      type: "edit",
+      id: crypto.randomUUID(),
+      update: encodeUpdate(update),
+    };
+    pending.current.set(event.id, event);
+    setPendingCount(pending.current.size);
+    const socket = socketRef.current;
+    if (socket?.readyState === WebSocket.OPEN && snapshotReceived.current) {
+      socket.send(JSON.stringify(event));
+    }
+  }, []);
 
   useEffect(() => {
     function onAwarenessUpdate(
@@ -152,22 +182,31 @@ function DocumentSession({ documentId }: { documentId: string }) {
   useEffect(() => {
     function onUpdate(update: Uint8Array, origin: unknown) {
       if (origin === "remote") return;
-      const event: PendingEvent = {
-        type: "edit",
-        id: crypto.randomUUID(),
-        update: encodeUpdate(update),
-      };
-      pending.current.set(event.id, event);
-      setPendingCount(pending.current.size);
-      const socket = socketRef.current;
-      if (socket?.readyState === WebSocket.OPEN && snapshotReceived.current) {
-        socket.send(JSON.stringify(event));
+      if (bufferedBytes.current + update.byteLength > MAX_BATCH_BYTES) flushEdits();
+      bufferedUpdates.current.push(update);
+      bufferedBytes.current += update.byteLength;
+      setPendingCount(pending.current.size + 1);
+      if (bufferedBytes.current >= MAX_BATCH_BYTES) {
+        flushEdits();
+        return;
+      }
+      if (editIdleTimer.current) clearTimeout(editIdleTimer.current);
+      editIdleTimer.current = setTimeout(flushEdits, EDIT_IDLE_MS);
+      // Debounce for nearby keystrokes, but bound save latency during continuous typing.
+      if (!editMaxWaitTimer.current) {
+        editMaxWaitTimer.current = setTimeout(flushEdits, EDIT_MAX_WAIT_MS);
       }
     }
 
     ydoc.on("update", onUpdate);
-    return () => { ydoc.off("update", onUpdate); };
-  }, [ydoc]);
+    return () => {
+      ydoc.off("update", onUpdate);
+      if (editIdleTimer.current) clearTimeout(editIdleTimer.current);
+      if (editMaxWaitTimer.current) clearTimeout(editMaxWaitTimer.current);
+      editIdleTimer.current = null;
+      editMaxWaitTimer.current = null;
+    };
+  }, [flushEdits, ydoc]);
 
   const documentLoaded = document !== null;
   useEffect(() => {
@@ -225,6 +264,7 @@ function DocumentSession({ documentId }: { documentId: string }) {
               for (const unsaved of pending.current.values()) {
                 socket.send(JSON.stringify(unsaved));
               }
+              flushEdits();
             } else if (message.type === "presence_snapshot") {
               if (!("connections" in message) || !Array.isArray(message.connections) ||
                 !message.connections.every(isPresenceConnection)) {
@@ -305,19 +345,19 @@ function DocumentSession({ documentId }: { documentId: string }) {
               Y.applyUpdate(ydoc, decodeUpdate(message.update), "remote");
               if ("id" in message && typeof message.id === "string") {
                 pending.current.delete(message.id);
-                setPendingCount(pending.current.size);
+                setPendingCount(pending.current.size + Number(bufferedUpdates.current.length > 0));
               }
             } else if (message.type === "ack" &&
               "id" in message && typeof message.id === "string") {
               pending.current.delete(message.id);
-              setPendingCount(pending.current.size);
+              setPendingCount(pending.current.size + Number(bufferedUpdates.current.length > 0));
             } else if (message.type === "title" &&
               "title" in message && typeof message.title === "string") {
               const savedTitle = message.title;
               setDocument((current) => current ? { ...current, title: savedTitle } : current);
               if ("id" in message && typeof message.id === "string") {
                 pending.current.delete(message.id);
-                setPendingCount(pending.current.size);
+                setPendingCount(pending.current.size + Number(bufferedUpdates.current.length > 0));
               }
             } else if (message.type === "access_revoked" || message.type === "access_denied") {
               denied.current = true;
@@ -360,9 +400,10 @@ function DocumentSession({ documentId }: { documentId: string }) {
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [awareness, clearRemotePresence, documentId, documentLoaded, getToken, isLoaded, sendAwareness, userId, ydoc]);
+  }, [awareness, clearRemotePresence, documentId, documentLoaded, flushEdits, getToken, isLoaded, sendAwareness, userId, ydoc]);
 
   function rename(title: string) {
+    flushEdits();
     const event: PendingEvent = { type: "rename", id: crypto.randomUUID(), title };
     pending.current.set(event.id, event);
     setPendingCount(pending.current.size);
