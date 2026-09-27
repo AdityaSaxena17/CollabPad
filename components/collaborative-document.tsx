@@ -24,8 +24,8 @@ type PendingEvent =
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "denied";
 type PresenceStatus = "loading" | "available" | "unavailable";
-const EDIT_IDLE_MS = 100;
-const EDIT_MAX_WAIT_MS = 300;
+const EDIT_IDLE_MS = 200;
+const EDIT_MAX_WAIT_MS = 500;
 const MAX_BATCH_BYTES = 128 * 1024;
 
 export type PresenceConnection = {
