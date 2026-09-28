@@ -17,10 +17,15 @@ class FakeCompletionEngine:
         return f" suggestion {self.count}\nnext line"
 
 
+class FakeSummaryEngine:
+    async def summarize(self, text: str, _scheduler) -> str:
+        return f"Summary of: {text[:80]}"
+
+
 async def main():
     server = grpc.aio.server()
     llm_pb2_grpc.add_LlmServiceServicer_to_server(
-        LlmServicer(FakeCompletionEngine()), server
+        LlmServicer(FakeCompletionEngine(), FakeSummaryEngine()), server
     )
     server.add_insecure_port("[::]:50052")
     await server.start()

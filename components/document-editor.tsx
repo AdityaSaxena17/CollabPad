@@ -31,6 +31,7 @@ import {
   RemoveFormatting,
   SeparatorHorizontal,
   Share2,
+  Sparkles,
   Strikethrough,
   Underline,
   Undo2,
@@ -48,7 +49,9 @@ import {
 } from "react";
 import { CollabMark } from "@/components/collab-mark";
 import { AiCompletionPreview } from "@/components/ai-completion-preview";
+import { DocumentSummaryPanel } from "@/components/document-summary-panel";
 import { useAiCompletion } from "@/components/use-ai-completion";
+import { useDocumentSummary } from "@/components/use-document-summary";
 import type { PresenceConnection } from "@/components/collaborative-document";
 import type { DocumentRecord } from "@/lib/gateway";
 import type * as Y from "yjs";
@@ -216,6 +219,7 @@ export function DocumentEditor({
   }, [sharedDocument, awareness]);
 
   const completion = useAiCompletion(editor, document.id, status);
+  const summary = useDocumentSummary(editor, document.id, status);
 
   const remoteUsers = [
     ...new Map(
@@ -496,7 +500,7 @@ export function DocumentEditor({
               </EditorMenu>
               <EditorMenu label="Tools">
                 <MenuItem label="Grammar correction" hint="Backend required" disabled />
-                <MenuItem label="Summarize document" hint="Backend required" disabled />
+                <MenuItem label="Summarize document" onSelect={() => void summary.start()} disabled={status !== "connected" || !formatting?.wordCount} />
                 <MenuItem label="Enhance writing" hint="Backend required" disabled />
               </EditorMenu>
               <EditorMenu label="Help">
@@ -545,6 +549,17 @@ export function DocumentEditor({
             className="hidden size-9 place-items-center rounded-full text-[#9aa0a6] disabled:cursor-not-allowed md:grid"
           >
             <History aria-hidden="true" size={19} />
+          </button>
+          <button
+            type="button"
+            disabled={status !== "connected" || !formatting?.wordCount}
+            onClick={() => void summary.start()}
+            title="Summarize document"
+            className="flex h-10 items-center gap-2 rounded-full border border-[#dadce0] bg-white px-3 text-sm font-medium text-[#1967d2] hover:bg-[#e8f0fe] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Sparkles aria-hidden="true" size={17} />
+            <span className="hidden sm:inline">Summarize</span>
+            <span className="sr-only sm:hidden">Summarize</span>
           </button>
           <button
             type="button"
@@ -927,6 +942,8 @@ export function DocumentEditor({
           {completion.error && <div className="mt-2 flex items-center gap-2"><p role="alert" className="text-[#b3261e]">{completion.error}</p><button type="button" onClick={completion.suggestion ? completion.tryAnother : completion.retry} className="text-[#1967d2]">Retry</button></div>}
         </div>
       )}
+
+      <DocumentSummaryPanel summary={summary} />
 
       <footer className="document-footer pointer-events-none fixed right-4 bottom-4 left-4 z-20 flex items-end justify-between gap-4">
         <span className="rounded-full border border-[#dadce0] bg-white/95 px-3 py-1.5 text-xs text-[#5f6368] shadow-sm backdrop-blur">

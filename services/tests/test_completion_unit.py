@@ -3,7 +3,6 @@
 import os
 import sys
 import asyncio
-import threading
 import types
 import unittest
 from unittest.mock import patch
@@ -18,6 +17,7 @@ from services.llm.completion import (
     prepare_completion,
 )
 from services.llm.service import LlmServicer
+from services.llm.scheduler import ModelScheduler
 from services.proto import llm_pb2
 
 
@@ -144,21 +144,22 @@ class CompletionServiceTest(unittest.IsolatedAsyncioTestCase):
         async def immediate(worker, *args):
             return worker(*args)
 
-        with patch("services.llm.service.asyncio.to_thread", new=immediate):
-            for reply, expected in (
-                ("Sure thing!", "Sure thing!"),
-                ("Response: next", "Response: next"),
-                ("0% visibility.", "0% visibility."),
-                ("<em>dark</em> road", "dark road"),
-                ("<b>very <i>dark</i></b>", "very dark"),
-                ("<b></b>", ""),
-                ("  ", ""),
-            ):
-                with self.subTest(reply=reply):
-                    result = await LlmServicer(ReplyEngine(reply)).Complete(
-                        llm_pb2.CompleteRequest(prefix="where are you"), FakeContext()
-                    )
-                    self.assertEqual(result.text, expected)
+        for reply, expected in (
+            ("Sure thing!", "Sure thing!"),
+            ("Response: next", "Response: next"),
+            ("0% visibility.", "0% visibility."),
+            ("<em>dark</em> road", "dark road"),
+            ("<b>very <i>dark</i></b>", "very dark"),
+            ("<b></b>", ""),
+            ("  ", ""),
+        ):
+            with self.subTest(reply=reply):
+                result = await LlmServicer(
+                    ReplyEngine(reply), scheduler=ModelScheduler(invoke=immediate)
+                ).Complete(
+                    llm_pb2.CompleteRequest(prefix="where are you"), FakeContext()
+                )
+                self.assertEqual(result.text, expected)
 
     async def test_sanitized_output_still_obeys_output_limits(self):
         class ReplyEngine:
@@ -171,14 +172,15 @@ class CompletionServiceTest(unittest.IsolatedAsyncioTestCase):
         async def immediate(worker, *args):
             return worker(*args)
 
-        with patch("services.llm.service.asyncio.to_thread", new=immediate):
-            for reply in ("<em>" + "x" * 601 + "</em>", "<b>bad\x00text</b>"):
-                with self.subTest(reply=reply):
-                    with self.assertRaises(Aborted) as raised:
-                        await LlmServicer(ReplyEngine(reply)).Complete(
-                            llm_pb2.CompleteRequest(prefix="hello"), FakeContext()
-                        )
-                    self.assertEqual(raised.exception.code, grpc.StatusCode.INTERNAL)
+        for reply in ("<em>" + "x" * 601 + "</em>", "<b>bad\x00text</b>"):
+            with self.subTest(reply=reply):
+                with self.assertRaises(Aborted) as raised:
+                    await LlmServicer(
+                        ReplyEngine(reply), scheduler=ModelScheduler(invoke=immediate)
+                    ).Complete(
+                        llm_pb2.CompleteRequest(prefix="hello"), FakeContext()
+                    )
+                self.assertEqual(raised.exception.code, grpc.StatusCode.INTERNAL)
 
     async def test_validation_and_unconfigured_model(self):
         service = LlmServicer()
@@ -194,60 +196,71 @@ class CompletionServiceTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(raised.exception.code, code)
 
     async def test_serializes_model_and_rejects_invalid_output(self):
-        started = threading.Event()
-        release = threading.Event()
+        started = asyncio.Event()
+        release = asyncio.Event()
+        calls = []
 
         class SlowEngine:
             def generate(self, _prefix, _suffix):
-                started.set()
-                release.wait(2)
+                calls.append("started")
+                calls.append("finished")
                 return " continuation"
 
-        service = LlmServicer(SlowEngine())
+        async def delayed(worker, *args):
+            if not started.is_set():
+                started.set()
+                await release.wait()
+            return worker(*args)
+
+        service = LlmServicer(SlowEngine(), scheduler=ModelScheduler(invoke=delayed))
         request = llm_pb2.CompleteRequest(prefix="hello")
         first = asyncio.create_task(service.Complete(request, FakeContext()))
-        try:
-            self.assertTrue(await asyncio.to_thread(started.wait, 1))
-            with self.assertRaises(Aborted) as raised:
-                await service.Complete(request, FakeContext())
-            self.assertEqual(raised.exception.code, grpc.StatusCode.UNAVAILABLE)
-        finally:
-            release.set()
+        await asyncio.wait_for(started.wait(), 1)
+        second = asyncio.create_task(service.Complete(request, FakeContext()))
+        await asyncio.sleep(0)
+        self.assertFalse(second.done())
+        self.assertEqual(calls, [])
+        release.set()
         self.assertEqual((await first).text, " continuation")
+        self.assertEqual((await second).text, " continuation")
+        self.assertEqual(calls, ["started", "finished", "started", "finished"])
 
         class BadEngine:
             def generate(self, _prefix, _suffix):
                 return "\x00"
 
+        async def immediate(worker, *args):
+            return worker(*args)
+
         with self.assertRaises(Aborted) as raised:
-            await LlmServicer(BadEngine()).Complete(request, FakeContext())
+            await LlmServicer(BadEngine(), scheduler=ModelScheduler(invoke=immediate)).Complete(
+                request, FakeContext()
+            )
         self.assertEqual(raised.exception.code, grpc.StatusCode.INTERNAL)
 
-    async def test_cancellation_keeps_model_locked_until_worker_finishes(self):
-        started = threading.Event()
-        release = threading.Event()
+    async def test_cancellation_keeps_model_busy_until_worker_finishes(self):
+        started = asyncio.Event()
+        release = asyncio.Event()
 
         class SlowEngine:
             def generate(self, _prefix, _suffix):
-                started.set()
-                release.wait(2)
                 return " done"
 
-        service = LlmServicer(SlowEngine())
+        async def delayed(worker, *args):
+            if not started.is_set():
+                started.set()
+                await release.wait()
+            return worker(*args)
+
+        service = LlmServicer(SlowEngine(), scheduler=ModelScheduler(invoke=delayed))
         request = llm_pb2.CompleteRequest(prefix="hello")
         first = asyncio.create_task(service.Complete(request, FakeContext()))
-        try:
-            self.assertTrue(await asyncio.to_thread(started.wait, 1))
-            first.cancel()
-            with self.assertRaises(asyncio.CancelledError):
-                await first
-            with self.assertRaises(Aborted) as raised:
-                await service.Complete(request, FakeContext())
-            self.assertEqual(raised.exception.code, grpc.StatusCode.UNAVAILABLE)
-        finally:
-            release.set()
-        for _ in range(20):
-            if not service.completion_lock.locked():
-                break
-            await asyncio.sleep(0.01)
-        self.assertFalse(service.completion_lock.locked())
+        await asyncio.wait_for(started.wait(), 1)
+        first.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await first
+        second = asyncio.create_task(service.Complete(request, FakeContext()))
+        await asyncio.sleep(0)
+        self.assertFalse(second.done())
+        release.set()
+        self.assertEqual((await second).text, " done")

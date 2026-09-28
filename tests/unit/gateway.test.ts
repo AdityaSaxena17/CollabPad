@@ -5,6 +5,8 @@ import {
   listDocuments,
   setDocumentSharing,
   completeText,
+  getSummaryJob,
+  startSummary,
 } from "@/lib/gateway";
 
 const document = {
@@ -85,4 +87,29 @@ test("requests and validates plain-text completion", async () => {
   await expect(completeText(document.id, "before", "", "token")).resolves.toBe("");
   fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ text: "   " }) } as Response);
   await expect(completeText(document.id, "before", "", "token")).rejects.toMatchObject({ status: 502 });
+});
+
+test("starts and polls a private document summary", async () => {
+  const fetchMock = vi.mocked(fetch);
+  const jobId = "1bf9b73e-6d83-41b2-9b6f-f91020ace005";
+  fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ jobId }) } as Response);
+  await expect(startSummary(document.id, "First\nSecond", "token")).resolves.toBe(jobId);
+  expect(fetchMock).toHaveBeenCalledWith(
+    `http://localhost:18080/api/documents/${document.id}/ai/summary`,
+    expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ text: "First\nSecond" }),
+      headers: { Authorization: "Bearer token", "Content-Type": "application/json" },
+    }),
+  );
+  fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ status: "complete", text: "Overview.", error: "" }) } as Response);
+  await expect(getSummaryJob(document.id, jobId, "token")).resolves.toEqual({
+    status: "complete", text: "Overview.", error: "",
+  });
+  await expect(startSummary(document.id, "  ", "token")).rejects.toMatchObject({ status: 400 });
+  await expect(startSummary(document.id, "x".repeat(100_001), "token")).rejects.toMatchObject({ status: 413 });
+  fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ status: "complete", text: "", error: "" }) } as Response);
+  await expect(getSummaryJob(document.id, jobId, "token")).rejects.toMatchObject({ status: 502 });
+  fetchMock.mockResolvedValueOnce({ ok: false, status: 404 } as Response);
+  await expect(getSummaryJob(document.id, jobId, "token")).rejects.toThrow("no longer available");
 });

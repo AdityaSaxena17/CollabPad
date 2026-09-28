@@ -150,3 +150,77 @@ export async function completeText(
   }
   return result.text;
 }
+
+export type SummaryJobStatus = {
+  status: "queued" | "running" | "complete" | "failed";
+  text: string;
+  error: string;
+};
+
+/** Starts a private summary of the editor text captured by the caller. */
+export async function startSummary(
+  documentId: string,
+  text: string,
+  token: string,
+): Promise<string> {
+  if (!text.trim() || text.length > 100_000) {
+    throw new GatewayError(
+      text.length > 100_000 ? "This document is too long to summarize." : "Add text before summarizing.",
+      text.length > 100_000 ? 413 : 400,
+    );
+  }
+  let result: unknown;
+  try {
+    result = await request(
+      `/api/documents/${encodeURIComponent(documentId)}/ai/summary`,
+      token,
+      { method: "POST", body: JSON.stringify({ text }) },
+    );
+  } catch (cause) {
+    if (cause instanceof GatewayError && [503, 504].includes(cause.status)) {
+      throw new GatewayError("Summary service is busy or unavailable. Try again later.", cause.status);
+    }
+    throw cause;
+  }
+  if (typeof result !== "object" || result === null ||
+      !("jobId" in result) || typeof result.jobId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(result.jobId)) {
+    throw new GatewayError("The AI service returned an invalid summary job.", 502);
+  }
+  return result.jobId;
+}
+
+/** Reads a summary job while the current user still has document access. */
+export async function getSummaryJob(
+  documentId: string,
+  jobId: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<SummaryJobStatus> {
+  let result: unknown;
+  try {
+    result = await request(
+      `/api/documents/${encodeURIComponent(documentId)}/ai/jobs/${encodeURIComponent(jobId)}`,
+      token,
+      { signal },
+    );
+  } catch (cause) {
+    if (cause instanceof GatewayError && cause.status === 404) {
+      throw new GatewayError("This summary is no longer available. Run it again.", 404);
+    }
+    if (cause instanceof GatewayError && [503, 504].includes(cause.status)) {
+      throw new GatewayError("Summary service is unavailable. Try again.", cause.status);
+    }
+    throw cause;
+  }
+  if (typeof result !== "object" || result === null ||
+      !("status" in result) || typeof result.status !== "string" ||
+      !["queued", "running", "complete", "failed"].includes(result.status) ||
+      !("text" in result) || typeof result.text !== "string" ||
+      !("error" in result) || typeof result.error !== "string" ||
+      result.text.length > 2_000 || result.error.length > 500 ||
+      (result.status === "complete" && !result.text.trim())) {
+    throw new GatewayError("The AI service returned an invalid summary status.", 502);
+  }
+  return result as SummaryJobStatus;
+}

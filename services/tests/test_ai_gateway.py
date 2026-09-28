@@ -97,6 +97,21 @@ class AiGatewayTest(unittest.TestCase):
                             if task == "completion":
                                 self.assertEqual(response.status_code, 200)
                                 self.assertIn("suggestion", response.json()["text"])
+                            elif task == "summary":
+                                self.assertEqual(response.status_code, 202)
+                                job_id = response.json()["jobId"]
+                                for _ in range(50):
+                                    job = client.get(f"{base}/jobs/{job_id}", headers=owner)
+                                    if job.json()["status"] == "complete":
+                                        break
+                                    time.sleep(0.02)
+                                self.assertEqual(job.status_code, 200)
+                                self.assertEqual(job.json()["status"], "complete")
+                                self.assertIn("A document to summarize.", job.json()["text"])
+                                self.assertEqual(
+                                    client.get(f"{base}/jobs/{job_id}", headers=guest).status_code,
+                                    404,
+                                )
                             else:
                                 self.assertEqual(response.status_code, 501)
                                 self.assertEqual(
@@ -146,7 +161,7 @@ class AiGatewayTest(unittest.TestCase):
                     invalid_job = client.get(f"{base}/jobs/not-a-uuid", headers=owner)
                     self.assertEqual(invalid_job.status_code, 400)
                     pending_job = client.get(f"{base}/jobs/{uuid4()}", headers=owner)
-                    self.assertEqual(pending_job.status_code, 501)
+                    self.assertEqual(pending_job.status_code, 404)
 
                     class UnavailableLlm:
                         async def Complete(self, *_args, **_kwargs):
