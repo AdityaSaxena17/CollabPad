@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: collab-docs-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-collab_docs}
@@ -59,6 +58,20 @@ services:
       retries: 5
     restart: unless-stopped
 
+  llm:
+    build:
+      context: .
+      dockerfile: services/Dockerfile.llm
+    command: ["python", "-m", "services.llm.main"]
+    environment:
+      LLM_MODEL_PATH: /models/${LLM_MODEL_FILE:-model.gguf}
+      LLM_N_CTX: ${LLM_N_CTX:-4096}
+      LLM_N_THREADS: ${LLM_N_THREADS:-4}
+      LLM_N_GPU_LAYERS: ${LLM_N_GPU_LAYERS:-0}
+    volumes:
+      - ${LLM_MODEL_DIR:-./models}:/models:ro
+    restart: unless-stopped
+
   gateway:
     build:
       context: .
@@ -68,11 +81,14 @@ services:
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       COLLABORATION_TARGET: collaboration:50051
+      LLM_TARGET: ${LLM_TARGET:-llm:50052}
       REDIS_URL: redis://redis:6379/0
     ports:
       - "${GATEWAY_PORT:-18080}:8000"
     depends_on:
       collaboration:
+        condition: service_started
+      llm:
         condition: service_started
     restart: unless-stopped
 

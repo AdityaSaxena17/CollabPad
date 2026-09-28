@@ -116,3 +116,37 @@ export async function setDocumentSharing(
   }
   return result;
 }
+
+/** Requests a plain-text continuation at the current editor cursor. */
+export async function completeText(
+  documentId: string,
+  prefix: string,
+  suffix: string,
+  token: string,
+): Promise<string> {
+  let result: unknown;
+  try {
+    result = await request(
+      `/api/documents/${encodeURIComponent(documentId)}/ai/completion`,
+      token,
+      { method: "POST", body: JSON.stringify({ prefix, suffix }) },
+    );
+  } catch (cause) {
+    if (cause instanceof GatewayError && [501, 503, 504].includes(cause.status)) {
+      throw new GatewayError(
+        cause.status === 504 ? "AI completion timed out. Try again." : "AI completion is unavailable. Try again later.",
+        cause.status,
+      );
+    }
+    throw cause;
+  }
+  if (
+    typeof result !== "object" || result === null ||
+    !("text" in result) || typeof result.text !== "string" ||
+    (result.text !== "" && !result.text.trim()) || result.text.length > 600 ||
+    [...result.text].some((character) => character.charCodeAt(0) < 32 && character !== "\n" && character !== "\t")
+  ) {
+    throw new GatewayError("The AI service returned an invalid suggestion.", 502);
+  }
+  return result.text;
+}

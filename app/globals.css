@@ -76,6 +76,12 @@ select:not(:disabled) {
   outline: none;
 }
 
+.ai-completion-ghost {
+  color: #80868b;
+  white-space: pre-wrap;
+  pointer-events: none;
+}
+
 .ProseMirror > :first-child {
   margin-top: 0;
 }

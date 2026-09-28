@@ -91,7 +91,7 @@ class GatewayIntegrationTest(unittest.TestCase):
                     self.assertEqual(shared.status_code, 200)
 
                     url = f"/ws/documents/{document_id}"
-                    headers = {"origin": "http://localhost:3000"}
+                    headers = {"origin": os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")}
                     with client.websocket_connect(url, headers=headers) as owner_socket:
                         with client.websocket_connect(url, headers=headers) as guest_socket:
                             owner_socket.send_json({"type": "auth", "token": "owner"})

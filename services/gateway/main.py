@@ -19,9 +19,12 @@ from pydantic import BaseModel
 from services.gateway.presence import LocalConnection, PresenceHub
 from services.proto import collaboration_pb2 as pb
 from services.proto import collaboration_pb2_grpc as rpc
+from services.proto import llm_pb2 as llm_pb
+from services.proto import llm_pb2_grpc as llm_rpc
 
 FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
 COLLABORATION_TARGET = os.environ.get("COLLABORATION_TARGET", "collaboration:50051")
+LLM_TARGET = os.environ.get("LLM_TARGET", "llm:50052")
 
 
 @asynccontextmanager
@@ -34,8 +37,10 @@ async def lifespan(app: FastAPI):
             COLLABORATION_TARGET,
             options=[("grpc.max_receive_message_length", 2_097_152)],
         )
+        llm_channel = grpc.aio.insecure_channel(LLM_TARGET)
         app.state.clerk = clerk
         app.state.stub = rpc.CollaborationServiceStub(channel)
+        app.state.llm_stub = llm_rpc.LlmServiceStub(llm_channel)
         presence = PresenceHub(clerk)
         app.state.presence = presence
         presence_task = asyncio.create_task(presence.run())
@@ -46,6 +51,7 @@ async def lifespan(app: FastAPI):
             await asyncio.gather(presence_task, return_exceptions=True)
             await presence.close()
             await channel.close()
+            await llm_channel.close()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -63,6 +69,19 @@ class CreateDocumentBody(BaseModel):
 
 class SetSharingBody(BaseModel):
     enabled: bool
+
+
+class CompletionBody(BaseModel):
+    prefix: str
+    suffix: str
+
+
+class SummaryBody(BaseModel):
+    text: str
+
+
+class EnhancementBody(BaseModel):
+    text: str
 
 
 def document_json(document: pb.Document) -> dict:
@@ -120,6 +139,42 @@ def grpc_http_error(error: grpc.aio.AioRpcError) -> HTTPException:
     return HTTPException(status_code=503, detail="Collaboration service unavailable.")
 
 
+def llm_http_error(error: grpc.aio.AioRpcError, task: str) -> HTTPException:
+    code = error.code()
+    if code == grpc.StatusCode.UNIMPLEMENTED:
+        return HTTPException(
+            status_code=501,
+            detail={"code": "task_not_implemented", "task": task},
+        )
+    if code == grpc.StatusCode.INVALID_ARGUMENT:
+        return HTTPException(status_code=400, detail="Invalid AI request.")
+    if code == grpc.StatusCode.RESOURCE_EXHAUSTED:
+        return HTTPException(status_code=413, detail="AI input is too large.")
+    if code in (grpc.StatusCode.NOT_FOUND, grpc.StatusCode.PERMISSION_DENIED):
+        return HTTPException(status_code=404, detail="AI request not found.")
+    if code == grpc.StatusCode.DEADLINE_EXCEEDED:
+        return HTTPException(status_code=504, detail="AI service timed out.")
+    return HTTPException(status_code=503, detail="AI service unavailable.")
+
+
+def require_ai_text(text: str, limit: int) -> None:
+    if len(text) > limit:
+        raise HTTPException(status_code=413, detail="AI input is too large.")
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="AI input must not be empty.")
+
+
+async def authorize_ai_document(document_id: str, request: Request) -> tuple[str, str]:
+    user_id = await current_user(request)
+    try:
+        document = await request.app.state.stub.GetDocument(
+            pb.GetDocumentRequest(document_id=document_id, user_id=user_id), timeout=5
+        )
+    except grpc.aio.AioRpcError as error:
+        raise grpc_http_error(error) from error
+    return document.id, user_id
+
+
 @app.get("/health")
 async def health():
     return {"ok": True}
@@ -174,6 +229,86 @@ async def set_sharing(document_id: str, body: SetSharingBody, request: Request):
     except grpc.aio.AioRpcError as error:
         raise grpc_http_error(error) from error
     return document_json(document)
+
+
+@app.post("/api/documents/{document_id}/ai/completion")
+async def complete_text(document_id: str, body: CompletionBody, request: Request):
+    canonical_id, user_id = await authorize_ai_document(document_id, request)
+    if len(body.prefix) + len(body.suffix) > 16_000:
+        raise HTTPException(status_code=413, detail="AI input is too large.")
+    if not body.prefix.strip() and not body.suffix.strip():
+        raise HTTPException(status_code=400, detail="AI input must not be empty.")
+    try:
+        result = await request.app.state.llm_stub.Complete(
+            llm_pb.CompleteRequest(
+                document_id=canonical_id,
+                user_id=user_id,
+                prefix=body.prefix,
+                suffix=body.suffix,
+            ),
+            timeout=60,
+        )
+    except grpc.aio.AioRpcError as error:
+        raise llm_http_error(error, "completion") from error
+    return {"text": result.text}
+
+
+@app.post("/api/documents/{document_id}/ai/summary", status_code=202)
+async def start_summary(document_id: str, body: SummaryBody, request: Request):
+    canonical_id, user_id = await authorize_ai_document(document_id, request)
+    require_ai_text(body.text, 100_000)
+    try:
+        result = await request.app.state.llm_stub.StartSummary(
+            llm_pb.SummaryRequest(document_id=canonical_id, user_id=user_id, text=body.text),
+            timeout=10,
+        )
+    except grpc.aio.AioRpcError as error:
+        raise llm_http_error(error, "summary") from error
+    return {"jobId": result.job_id}
+
+
+@app.get("/api/documents/{document_id}/ai/jobs/{job_id}")
+async def get_summary_job(document_id: str, job_id: str, request: Request):
+    canonical_id, user_id = await authorize_ai_document(document_id, request)
+    try:
+        canonical_job_id = str(UUID(job_id))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail="Invalid AI job ID.") from error
+    try:
+        result = await request.app.state.llm_stub.GetSummaryJob(
+            llm_pb.SummaryJobQuery(
+                document_id=canonical_id,
+                user_id=user_id,
+                job_id=canonical_job_id,
+            ),
+            timeout=10,
+        )
+    except grpc.aio.AioRpcError as error:
+        raise llm_http_error(error, "summary") from error
+    states = {
+        llm_pb.SUMMARY_STATE_QUEUED: "queued",
+        llm_pb.SUMMARY_STATE_RUNNING: "running",
+        llm_pb.SUMMARY_STATE_COMPLETE: "complete",
+        llm_pb.SUMMARY_STATE_FAILED: "failed",
+    }
+    state = states.get(result.state)
+    if state is None:
+        raise HTTPException(status_code=503, detail="Invalid AI job status.")
+    return {"status": state, "text": result.text, "error": result.error}
+
+
+@app.post("/api/documents/{document_id}/ai/enhancement")
+async def enhance_text(document_id: str, body: EnhancementBody, request: Request):
+    canonical_id, user_id = await authorize_ai_document(document_id, request)
+    require_ai_text(body.text, 8_000)
+    try:
+        result = await request.app.state.llm_stub.Enhance(
+            llm_pb.EnhanceRequest(document_id=canonical_id, user_id=user_id, text=body.text),
+            timeout=10,
+        )
+    except grpc.aio.AioRpcError as error:
+        raise llm_http_error(error, "enhancement") from error
+    return {"text": result.text}
 
 
 @app.websocket("/ws/documents/{document_id}")

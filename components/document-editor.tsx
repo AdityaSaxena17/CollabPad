@@ -31,7 +31,6 @@ import {
   RemoveFormatting,
   SeparatorHorizontal,
   Share2,
-  Sparkles,
   Strikethrough,
   Underline,
   Undo2,
@@ -48,6 +47,8 @@ import {
   type ReactNode,
 } from "react";
 import { CollabMark } from "@/components/collab-mark";
+import { AiCompletionPreview } from "@/components/ai-completion-preview";
+import { useAiCompletion } from "@/components/use-ai-completion";
 import type { PresenceConnection } from "@/components/collaborative-document";
 import type { DocumentRecord } from "@/lib/gateway";
 import type * as Y from "yjs";
@@ -202,6 +203,7 @@ export function DocumentEditor({
         provider: { awareness },
         user: { name: "You", color: "#0b57d0" },
       }),
+      AiCompletionPreview,
     ],
     immediatelyRender: false,
     editable: status === "connected",
@@ -212,6 +214,8 @@ export function DocumentEditor({
       },
     },
   }, [sharedDocument, awareness]);
+
+  const completion = useAiCompletion(editor, document.id, status);
 
   const remoteUsers = [
     ...new Map(
@@ -533,15 +537,6 @@ export function DocumentEditor({
               )}
             </div>
           ) : null}
-          <button
-            type="button"
-            disabled
-            title="AI tools require the Python LLM service"
-            className="hidden h-9 items-center gap-2 rounded-full border border-[#dadce0] px-3 text-sm font-medium text-[#9aa0a6] disabled:cursor-not-allowed lg:flex"
-          >
-            <Sparkles aria-hidden="true" size={16} />
-            Ask AI
-          </button>
           <button
             type="button"
             disabled
@@ -915,6 +910,23 @@ export function DocumentEditor({
           <EditorContent editor={editor} />
         </div>
       </section>
+
+      {(completion.suggestion || completion.loading || completion.error) && (
+        <div role="group" className="fixed right-4 bottom-16 z-30 max-w-[min(480px,calc(100vw-32px))] rounded-xl border border-[#dadce0] bg-white p-3 text-sm shadow-lg" aria-label="AI completion">
+          {completion.suggestion && (
+            <div className="flex flex-wrap gap-2">
+              <p className="sr-only" aria-live="polite">Suggested completion: {completion.suggestion.text}</p>
+              <button type="button" onClick={() => completion.accept("all")} className="rounded-full bg-[#1a73e8] px-3 py-1.5 text-white">Accept all <span className="text-xs opacity-80">Tab</span></button>
+              <button type="button" onClick={() => completion.accept("word")} className="rounded-full border border-[#dadce0] px-3 py-1.5">Accept word</button>
+              <button type="button" onClick={() => completion.accept("line")} className="rounded-full border border-[#dadce0] px-3 py-1.5">Accept line</button>
+              <button type="button" disabled={completion.loading} onClick={completion.tryAnother} className="rounded-full border border-[#dadce0] px-3 py-1.5 disabled:opacity-50">Try another</button>
+              <button type="button" onClick={completion.dismiss} className="rounded-full border border-[#dadce0] px-3 py-1.5">Dismiss</button>
+            </div>
+          )}
+          {completion.loading && <p role="status" className="mt-2 text-[#5f6368]">Writing suggestion…</p>}
+          {completion.error && <div className="mt-2 flex items-center gap-2"><p role="alert" className="text-[#b3261e]">{completion.error}</p><button type="button" onClick={completion.suggestion ? completion.tryAnother : completion.retry} className="text-[#1967d2]">Retry</button></div>}
+        </div>
+      )}
 
       <footer className="document-footer pointer-events-none fixed right-4 bottom-4 left-4 z-20 flex items-end justify-between gap-4">
         <span className="rounded-full border border-[#dadce0] bg-white/95 px-3 py-1.5 text-xs text-[#5f6368] shadow-sm backdrop-blur">

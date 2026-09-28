@@ -1,0 +1,13 @@
+FROM python:3.11-slim AS builder
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake && rm -rf /var/lib/apt/lists/*
+RUN python -m venv /opt/llm-venv
+ENV PATH=/opt/llm-venv/bin:$PATH
+COPY services/requirements-llm.txt /app/requirements-llm.txt
+RUN pip install --no-cache-dir -r /app/requirements-llm.txt
+
+FROM python:3.11-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /opt/llm-venv /opt/llm-venv
+ENV PATH=/opt/llm-venv/bin:$PATH PYTHONPATH=/app
+COPY services /app/services

@@ -25,7 +25,9 @@ class CollaborationIntegrationTest(unittest.IsolatedAsyncioTestCase):
             min_size=1,
             max_size=2,
         )
-        self.channel = grpc.aio.insecure_channel("localhost:50051")
+        self.channel = grpc.aio.insecure_channel(
+            os.environ.get("COLLABORATION_TARGET", "localhost:50051")
+        )
         self.stub = rpc.CollaborationServiceStub(self.channel)
         self.document_ids = []
         self.calls = []

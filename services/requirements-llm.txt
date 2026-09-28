@@ -1,0 +1,3 @@
+grpcio==1.84.0
+llama-cpp-python==0.3.35
+protobuf==7.36.2

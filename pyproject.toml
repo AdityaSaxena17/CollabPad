@@ -1,0 +1,21 @@
+[project]
+name = "collabpad"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic==1.20.0",
+    "asyncpg==0.31.0",
+    "clerk-backend-api==7.0.0",
+    "coverage>=7.10,<8",
+    "fastapi==0.141.1",
+    "grpcio==1.84.0",
+    "grpcio-tools==1.84.0",
+    "httpx==0.28.1",
+    "llama-cpp-python>=0.3.35",
+    "pycrdt==0.14.6",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "redis==7.4.1",
+    "sqlalchemy==2.0.54",
+    "uvicorn[standard]==0.54.0",
+]

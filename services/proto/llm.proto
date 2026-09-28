@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package collabdocs.llm.v1;
+
+service LlmService {
+  rpc Complete(CompleteRequest) returns (TextResult);
+  rpc StartSummary(SummaryRequest) returns (SummaryJobRef);
+  rpc GetSummaryJob(SummaryJobQuery) returns (SummaryJobStatus);
+  rpc Enhance(EnhanceRequest) returns (TextResult);
+}
+
+message CompleteRequest {
+  string document_id = 1;
+  string user_id = 2;
+  string prefix = 3;
+  string suffix = 4;
+}
+
+message SummaryRequest {
+  string document_id = 1;
+  string user_id = 2;
+  string text = 3;
+}
+
+message SummaryJobRef {
+  string job_id = 1;
+}
+
+message SummaryJobQuery {
+  string document_id = 1;
+  string user_id = 2;
+  string job_id = 3;
+}
+
+enum SummaryState {
+  SUMMARY_STATE_UNSPECIFIED = 0;
+  SUMMARY_STATE_QUEUED = 1;
+  SUMMARY_STATE_RUNNING = 2;
+  SUMMARY_STATE_COMPLETE = 3;
+  SUMMARY_STATE_FAILED = 4;
+}
+
+message SummaryJobStatus {
+  SummaryState state = 1;
+  string text = 2;
+  string error = 3;
+}
+
+message EnhanceRequest {
+  string document_id = 1;
+  string user_id = 2;
+  string text = 3;
+}
+
+message TextResult {
+  string text = 1;
+}
