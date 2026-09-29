@@ -61,19 +61,64 @@ select:not(:disabled) {
   background: #e8eaed;
 }
 
+.document-pages {
+  position: relative;
+  width: 816px;
+  margin-inline: auto;
+}
+
+.document-page-stack {
+  display: grid;
+  gap: 32px;
+  pointer-events: none;
+}
+
 .document-page {
-  width: min(816px, calc(100vw - 24px));
-  min-height: 1056px;
+  width: 816px;
+  height: 1056px;
+  background: white;
+  box-shadow: 0 1px 4px rgba(60, 64, 67, 0.28);
+}
+
+.document-editor-content {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 1;
+}
+
+.document-page-mask {
+  position: absolute;
+  left: 0;
+  z-index: 2;
+  width: 816px;
+  height: 200px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    white 0 96px,
+    #f1f3f4 96px 128px,
+    white 128px
+  );
 }
 
 .ProseMirror {
-  min-height: 912px;
+  width: 816px;
+  min-height: 1056px;
   padding: 72px 88px 96px;
   color: #202124;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 11pt;
   line-height: 1.5;
   outline: none;
+  overflow-wrap: anywhere;
+}
+
+.document-page-break {
+  display: block;
+  width: 100%;
+  pointer-events: none;
+  line-height: 0;
+  user-select: none;
 }
 
 .ai-completion-ghost {
@@ -136,12 +181,13 @@ select:not(:disabled) {
 
 .ProseMirror pre {
   margin: 1rem 0;
-  overflow-x: auto;
   border-radius: 0.5rem;
   background: #f1f3f4;
   padding: 0.9rem 1rem;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 0.9rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .ProseMirror a {
@@ -180,25 +226,20 @@ select:not(:disabled) {
   user-select: none;
 }
 
-@media (max-width: 640px) {
-  .ProseMirror {
-    min-height: calc(100vh - 220px);
-    padding: 44px 28px 72px;
-  }
-
-  .document-page {
-    min-height: calc(100vh - 190px);
-  }
-}
-
 @media print {
   @page {
-    size: A4;
-    margin: 0;
+    size: letter;
+    margin: 0.75in 0.916667in 1in;
   }
 
   body {
     background: white;
+  }
+
+  main {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
   }
 
   .editor-chrome,
@@ -219,15 +260,25 @@ select:not(:disabled) {
     padding: 0 !important;
   }
 
-  .document-page {
-    width: 210mm !important;
-    min-height: 297mm !important;
+  .document-pages {
+    width: auto !important;
     margin: 0 !important;
-    box-shadow: none !important;
+    zoom: 1 !important;
+  }
+
+  .document-page-stack,
+  .document-page-mask,
+  .document-page-break {
+    display: none !important;
+  }
+
+  .document-editor-content {
+    position: static !important;
   }
 
   .ProseMirror {
-    min-height: 297mm;
-    padding: 20mm 22mm;
+    width: auto !important;
+    min-height: 0 !important;
+    padding: 0 !important;
   }
 }

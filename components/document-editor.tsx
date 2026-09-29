@@ -49,6 +49,13 @@ import {
 } from "react";
 import { CollabMark } from "@/components/collab-mark";
 import { AiCompletionPreview } from "@/components/ai-completion-preview";
+import {
+  DocumentPagination,
+  PAGE_BOTTOM,
+  PAGE_GAP,
+  PAGE_HEIGHT,
+  useDocumentPagination,
+} from "@/components/use-document-pagination";
 import { DocumentSummaryPanel } from "@/components/document-summary-panel";
 import { WritingEnhancementPanel } from "@/components/writing-enhancement-panel";
 import { useAiCompletion } from "@/components/use-ai-completion";
@@ -209,6 +216,7 @@ export function DocumentEditor({
         user: { name: "You", color: "#0b57d0" },
       }),
       AiCompletionPreview,
+      DocumentPagination,
     ],
     immediatelyRender: false,
     editable: status === "connected",
@@ -223,6 +231,7 @@ export function DocumentEditor({
   const completion = useAiCompletion(editor, document.id, status);
   const summary = useDocumentSummary(editor, document.id, status);
   const enhancement = useWritingEnhancement(editor, document.id, status);
+  const pageCount = useDocumentPagination(editor, zoom);
 
   function startSummary() {
     enhancement.close();
@@ -943,12 +952,25 @@ export function DocumentEditor({
         </div>
       </div>
 
-      <section className="document-workspace flex flex-1 justify-center overflow-auto bg-[#f1f3f4] px-3 pt-5 pb-24 sm:px-6 sm:pt-8">
+      <section className="document-workspace flex-1 overflow-auto bg-[#f1f3f4] px-3 pt-5 pb-24 sm:px-6 sm:pt-8">
         <div
-          className="document-page shrink-0 overflow-hidden bg-white shadow-[0_1px_4px_rgba(60,64,67,0.28)]"
+          className="document-pages"
           style={{ zoom: zoom / 100 }}
         >
-          <EditorContent editor={editor} />
+          <div className="document-page-stack" aria-hidden="true">
+            {Array.from({ length: pageCount }, (_, index) => (
+              <div className="document-page" key={index} />
+            ))}
+          </div>
+          <EditorContent className="document-editor-content" editor={editor} />
+          {Array.from({ length: pageCount - 1 }, (_, index) => (
+            <div
+              className="document-page-mask"
+              key={index}
+              style={{ top: index * (PAGE_HEIGHT + PAGE_GAP) + PAGE_HEIGHT - PAGE_BOTTOM }}
+              aria-hidden="true"
+            />
+          ))}
         </div>
       </section>
 
