@@ -122,7 +122,7 @@ export function useAiCompletion(editor: Editor | null, documentId: string, statu
     const editorDom = editor.view.dom;
     function onTransaction({ transaction }: { transaction: typeof activeEditor.state.tr }) {
       if (transaction.docChanged) {
-        if (transaction.getMeta(AI_ACCEPTED_META)) return;
+        if (transaction.getMeta(AI_ACCEPTED_META) || transaction.getMeta("ai-enhancement-accepted")) return;
         const local = !transaction.getMeta(ySyncPluginKey);
         const oldText = transaction.before.textBetween(0, transaction.before.content.size, "\n");
         const newText = transaction.doc.textBetween(0, transaction.doc.content.size, "\n");

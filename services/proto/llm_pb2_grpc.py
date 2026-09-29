@@ -5,7 +5,7 @@ import warnings
 
 from services.proto import llm_pb2 as services_dot_proto_dot_llm__pb2
 
-GRPC_GENERATED_VERSION = '1.83.1'
+GRPC_GENERATED_VERSION = '1.84.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -49,10 +49,15 @@ class LlmServiceStub:
                 request_serializer=services_dot_proto_dot_llm__pb2.SummaryJobQuery.SerializeToString,
                 response_deserializer=services_dot_proto_dot_llm__pb2.SummaryJobStatus.FromString,
                 _registered_method=True)
-        self.Enhance = channel.unary_unary(
-                '/collabdocs.llm.v1.LlmService/Enhance',
+        self.StartEnhancement = channel.unary_unary(
+                '/collabdocs.llm.v1.LlmService/StartEnhancement',
                 request_serializer=services_dot_proto_dot_llm__pb2.EnhanceRequest.SerializeToString,
-                response_deserializer=services_dot_proto_dot_llm__pb2.TextResult.FromString,
+                response_deserializer=services_dot_proto_dot_llm__pb2.EnhancementJobRef.FromString,
+                _registered_method=True)
+        self.GetEnhancementJob = channel.unary_unary(
+                '/collabdocs.llm.v1.LlmService/GetEnhancementJob',
+                request_serializer=services_dot_proto_dot_llm__pb2.EnhancementJobQuery.SerializeToString,
+                response_deserializer=services_dot_proto_dot_llm__pb2.EnhancementJobStatus.FromString,
                 _registered_method=True)
 
 
@@ -77,7 +82,13 @@ class LlmServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def Enhance(self, request, context):
+    def StartEnhancement(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetEnhancementJob(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -101,10 +112,15 @@ def add_LlmServiceServicer_to_server(servicer, server):
                     request_deserializer=services_dot_proto_dot_llm__pb2.SummaryJobQuery.FromString,
                     response_serializer=services_dot_proto_dot_llm__pb2.SummaryJobStatus.SerializeToString,
             ),
-            'Enhance': grpc.unary_unary_rpc_method_handler(
-                    servicer.Enhance,
+            'StartEnhancement': grpc.unary_unary_rpc_method_handler(
+                    servicer.StartEnhancement,
                     request_deserializer=services_dot_proto_dot_llm__pb2.EnhanceRequest.FromString,
-                    response_serializer=services_dot_proto_dot_llm__pb2.TextResult.SerializeToString,
+                    response_serializer=services_dot_proto_dot_llm__pb2.EnhancementJobRef.SerializeToString,
+            ),
+            'GetEnhancementJob': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetEnhancementJob,
+                    request_deserializer=services_dot_proto_dot_llm__pb2.EnhancementJobQuery.FromString,
+                    response_serializer=services_dot_proto_dot_llm__pb2.EnhancementJobStatus.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -199,7 +215,7 @@ class LlmService:
             _registered_method=True)
 
     @staticmethod
-    def Enhance(request,
+    def StartEnhancement(request,
             target,
             options=(),
             channel_credentials=None,
@@ -212,9 +228,36 @@ class LlmService:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/collabdocs.llm.v1.LlmService/Enhance',
+            '/collabdocs.llm.v1.LlmService/StartEnhancement',
             services_dot_proto_dot_llm__pb2.EnhanceRequest.SerializeToString,
-            services_dot_proto_dot_llm__pb2.TextResult.FromString,
+            services_dot_proto_dot_llm__pb2.EnhancementJobRef.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetEnhancementJob(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/collabdocs.llm.v1.LlmService/GetEnhancementJob',
+            services_dot_proto_dot_llm__pb2.EnhancementJobQuery.SerializeToString,
+            services_dot_proto_dot_llm__pb2.EnhancementJobStatus.FromString,
             options,
             channel_credentials,
             insecure,

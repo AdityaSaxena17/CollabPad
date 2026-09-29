@@ -50,8 +50,10 @@ import {
 import { CollabMark } from "@/components/collab-mark";
 import { AiCompletionPreview } from "@/components/ai-completion-preview";
 import { DocumentSummaryPanel } from "@/components/document-summary-panel";
+import { WritingEnhancementPanel } from "@/components/writing-enhancement-panel";
 import { useAiCompletion } from "@/components/use-ai-completion";
 import { useDocumentSummary } from "@/components/use-document-summary";
+import { useWritingEnhancement } from "@/components/use-writing-enhancement";
 import type { PresenceConnection } from "@/components/collaborative-document";
 import type { DocumentRecord } from "@/lib/gateway";
 import type * as Y from "yjs";
@@ -220,6 +222,17 @@ export function DocumentEditor({
 
   const completion = useAiCompletion(editor, document.id, status);
   const summary = useDocumentSummary(editor, document.id, status);
+  const enhancement = useWritingEnhancement(editor, document.id, status);
+
+  function startSummary() {
+    enhancement.close();
+    void summary.start();
+  }
+
+  function startEnhancement() {
+    summary.close();
+    enhancement.start();
+  }
 
   const remoteUsers = [
     ...new Map(
@@ -256,6 +269,7 @@ export function DocumentEditor({
           canOutdent: false,
           wordCount: 0,
           characterCount: 0,
+          hasSelection: false,
         };
       }
 
@@ -292,6 +306,7 @@ export function DocumentEditor({
         canOutdent: currentEditor.can().liftListItem("listItem"),
         wordCount: trimmedText ? trimmedText.split(/\s+/u).length : 0,
         characterCount: text.length,
+        hasSelection: !currentEditor.state.selection.empty,
       };
     },
   });
@@ -500,8 +515,8 @@ export function DocumentEditor({
               </EditorMenu>
               <EditorMenu label="Tools">
                 <MenuItem label="Grammar correction" hint="Backend required" disabled />
-                <MenuItem label="Summarize document" onSelect={() => void summary.start()} disabled={status !== "connected" || !formatting?.wordCount} />
-                <MenuItem label="Enhance writing" hint="Backend required" disabled />
+                <MenuItem label="Summarize document" onSelect={startSummary} disabled={status !== "connected" || !formatting?.wordCount} />
+                <MenuItem label="Enhance writing" onSelect={startEnhancement} disabled={status !== "connected" || !formatting?.hasSelection} />
               </EditorMenu>
               <EditorMenu label="Help">
                 <div className="px-4 py-2 text-sm leading-6 text-[#5f6368]">
@@ -553,13 +568,24 @@ export function DocumentEditor({
           <button
             type="button"
             disabled={status !== "connected" || !formatting?.wordCount}
-            onClick={() => void summary.start()}
+            onClick={startSummary}
             title="Summarize document"
             className="flex h-10 items-center gap-2 rounded-full border border-[#dadce0] bg-white px-3 text-sm font-medium text-[#1967d2] hover:bg-[#e8f0fe] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Sparkles aria-hidden="true" size={17} />
             <span className="hidden sm:inline">Summarize</span>
             <span className="sr-only sm:hidden">Summarize</span>
+          </button>
+          <button
+            type="button"
+            disabled={status !== "connected" || !formatting?.hasSelection}
+            onClick={startEnhancement}
+            title="Enhance selected writing"
+            className="flex h-10 items-center gap-2 rounded-full border border-[#dadce0] bg-white px-3 text-sm font-medium text-[#1967d2] hover:bg-[#e8f0fe] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Sparkles aria-hidden="true" size={17} />
+            <span className="hidden sm:inline">Enhance</span>
+            <span className="sr-only sm:hidden">Enhance selected writing</span>
           </button>
           <button
             type="button"
@@ -944,6 +970,7 @@ export function DocumentEditor({
       )}
 
       <DocumentSummaryPanel summary={summary} />
+      <WritingEnhancementPanel enhancement={enhancement} connected={status === "connected"} />
 
       <footer className="document-footer pointer-events-none fixed right-4 bottom-4 left-4 z-20 flex items-end justify-between gap-4">
         <span className="rounded-full border border-[#dadce0] bg-white/95 px-3 py-1.5 text-xs text-[#5f6368] shadow-sm backdrop-blur">

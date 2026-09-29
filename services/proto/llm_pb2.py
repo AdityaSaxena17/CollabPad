@@ -24,15 +24,17 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x18services/proto/llm.proto\x12\x11\x63ollabdocs.llm.v1\"W\n\x0f\x43ompleteRequest\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0e\n\x06prefix\x18\x03 \x01(\t\x12\x0e\n\x06suffix\x18\x04 \x01(\t\"D\n\x0eSummaryRequest\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0c\n\x04text\x18\x03 \x01(\t\"\x1f\n\rSummaryJobRef\x12\x0e\n\x06job_id\x18\x01 \x01(\t\"G\n\x0fSummaryJobQuery\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0e\n\x06job_id\x18\x03 \x01(\t\"_\n\x10SummaryJobStatus\x12.\n\x05state\x18\x01 \x01(\x0e\x32\x1f.collabdocs.llm.v1.SummaryState\x12\x0c\n\x04text\x18\x02 \x01(\t\x12\r\n\x05\x65rror\x18\x03 \x01(\t\"D\n\x0e\x45nhanceRequest\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0c\n\x04text\x18\x03 \x01(\t\"\x1a\n\nTextResult\x12\x0c\n\x04text\x18\x01 \x01(\t*\x98\x01\n\x0cSummaryState\x12\x1d\n\x19SUMMARY_STATE_UNSPECIFIED\x10\x00\x12\x18\n\x14SUMMARY_STATE_QUEUED\x10\x01\x12\x19\n\x15SUMMARY_STATE_RUNNING\x10\x02\x12\x1a\n\x16SUMMARY_STATE_COMPLETE\x10\x03\x12\x18\n\x14SUMMARY_STATE_FAILED\x10\x04\x32\xd7\x02\n\nLlmService\x12M\n\x08\x43omplete\x12\".collabdocs.llm.v1.CompleteRequest\x1a\x1d.collabdocs.llm.v1.TextResult\x12S\n\x0cStartSummary\x12!.collabdocs.llm.v1.SummaryRequest\x1a .collabdocs.llm.v1.SummaryJobRef\x12X\n\rGetSummaryJob\x12\".collabdocs.llm.v1.SummaryJobQuery\x1a#.collabdocs.llm.v1.SummaryJobStatus\x12K\n\x07\x45nhance\x12!.collabdocs.llm.v1.EnhanceRequest\x1a\x1d.collabdocs.llm.v1.TextResultb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x18services/proto/llm.proto\x12\x11\x63ollabdocs.llm.v1\"W\n\x0f\x43ompleteRequest\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0e\n\x06prefix\x18\x03 \x01(\t\x12\x0e\n\x06suffix\x18\x04 \x01(\t\"D\n\x0eSummaryRequest\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0c\n\x04text\x18\x03 \x01(\t\"\x1f\n\rSummaryJobRef\x12\x0e\n\x06job_id\x18\x01 \x01(\t\"G\n\x0fSummaryJobQuery\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0e\n\x06job_id\x18\x03 \x01(\t\"_\n\x10SummaryJobStatus\x12.\n\x05state\x18\x01 \x01(\x0e\x32\x1f.collabdocs.llm.v1.SummaryState\x12\x0c\n\x04text\x18\x02 \x01(\t\x12\r\n\x05\x65rror\x18\x03 \x01(\t\"D\n\x0e\x45nhanceRequest\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0c\n\x04text\x18\x03 \x01(\t\"#\n\x11\x45nhancementJobRef\x12\x0e\n\x06job_id\x18\x01 \x01(\t\"K\n\x13\x45nhancementJobQuery\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0e\n\x06job_id\x18\x03 \x01(\t\"g\n\x14\x45nhancementJobStatus\x12\x32\n\x05state\x18\x01 \x01(\x0e\x32#.collabdocs.llm.v1.EnhancementState\x12\x0c\n\x04text\x18\x02 \x01(\t\x12\r\n\x05\x65rror\x18\x03 \x01(\t\"\x1a\n\nTextResult\x12\x0c\n\x04text\x18\x01 \x01(\t*\x98\x01\n\x0cSummaryState\x12\x1d\n\x19SUMMARY_STATE_UNSPECIFIED\x10\x00\x12\x18\n\x14SUMMARY_STATE_QUEUED\x10\x01\x12\x19\n\x15SUMMARY_STATE_RUNNING\x10\x02\x12\x1a\n\x16SUMMARY_STATE_COMPLETE\x10\x03\x12\x18\n\x14SUMMARY_STATE_FAILED\x10\x04*\xb0\x01\n\x10\x45nhancementState\x12!\n\x1d\x45NHANCEMENT_STATE_UNSPECIFIED\x10\x00\x12\x1c\n\x18\x45NHANCEMENT_STATE_QUEUED\x10\x01\x12\x1d\n\x19\x45NHANCEMENT_STATE_RUNNING\x10\x02\x12\x1e\n\x1a\x45NHANCEMENT_STATE_COMPLETE\x10\x03\x12\x1c\n\x18\x45NHANCEMENT_STATE_FAILED\x10\x04\x32\xcd\x03\n\nLlmService\x12M\n\x08\x43omplete\x12\".collabdocs.llm.v1.CompleteRequest\x1a\x1d.collabdocs.llm.v1.TextResult\x12S\n\x0cStartSummary\x12!.collabdocs.llm.v1.SummaryRequest\x1a .collabdocs.llm.v1.SummaryJobRef\x12X\n\rGetSummaryJob\x12\".collabdocs.llm.v1.SummaryJobQuery\x1a#.collabdocs.llm.v1.SummaryJobStatus\x12[\n\x10StartEnhancement\x12!.collabdocs.llm.v1.EnhanceRequest\x1a$.collabdocs.llm.v1.EnhancementJobRef\x12\x64\n\x11GetEnhancementJob\x12&.collabdocs.llm.v1.EnhancementJobQuery\x1a\'.collabdocs.llm.v1.EnhancementJobStatusb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'services.proto.llm_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_SUMMARYSTATE']._serialized_start=508
-  _globals['_SUMMARYSTATE']._serialized_end=660
+  _globals['_SUMMARYSTATE']._serialized_start=727
+  _globals['_SUMMARYSTATE']._serialized_end=879
+  _globals['_ENHANCEMENTSTATE']._serialized_start=882
+  _globals['_ENHANCEMENTSTATE']._serialized_end=1058
   _globals['_COMPLETEREQUEST']._serialized_start=47
   _globals['_COMPLETEREQUEST']._serialized_end=134
   _globals['_SUMMARYREQUEST']._serialized_start=136
@@ -45,8 +47,14 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_SUMMARYJOBSTATUS']._serialized_end=407
   _globals['_ENHANCEREQUEST']._serialized_start=409
   _globals['_ENHANCEREQUEST']._serialized_end=477
-  _globals['_TEXTRESULT']._serialized_start=479
-  _globals['_TEXTRESULT']._serialized_end=505
-  _globals['_LLMSERVICE']._serialized_start=663
-  _globals['_LLMSERVICE']._serialized_end=1006
+  _globals['_ENHANCEMENTJOBREF']._serialized_start=479
+  _globals['_ENHANCEMENTJOBREF']._serialized_end=514
+  _globals['_ENHANCEMENTJOBQUERY']._serialized_start=516
+  _globals['_ENHANCEMENTJOBQUERY']._serialized_end=591
+  _globals['_ENHANCEMENTJOBSTATUS']._serialized_start=593
+  _globals['_ENHANCEMENTJOBSTATUS']._serialized_end=696
+  _globals['_TEXTRESULT']._serialized_start=698
+  _globals['_TEXTRESULT']._serialized_end=724
+  _globals['_LLMSERVICE']._serialized_start=1061
+  _globals['_LLMSERVICE']._serialized_end=1522
 # @@protoc_insertion_point(module_scope)

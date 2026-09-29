@@ -1,4 +1,4 @@
-"""Check completion, summaries, and the remaining private gRPC stub."""
+"""Check completion, summaries, and private enhancement jobs over gRPC."""
 
 import asyncio
 import os
@@ -22,7 +22,7 @@ class LlmStubTest(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.channel.close()
 
-    async def test_completion_summary_and_remaining_stub(self):
+    async def test_completion_summary_and_enhancement(self):
         completed = await self.stub.Complete(
             pb.CompleteRequest(
                 document_id=self.document_id, user_id="owner", prefix="Hello"
@@ -50,8 +50,21 @@ class LlmStubTest(unittest.IsolatedAsyncioTestCase):
                 document_id=self.document_id, user_id="other", job_id=reference.job_id
             ), timeout=5)
         self.assertEqual(raised.exception.code(), grpc.StatusCode.NOT_FOUND)
+        reference = await self.stub.StartEnhancement(pb.EnhanceRequest(
+            document_id=self.document_id, user_id="owner", text="Hello"
+        ), timeout=5)
+        query = pb.EnhancementJobQuery(
+            document_id=self.document_id, user_id="owner", job_id=reference.job_id
+        )
+        for _ in range(50):
+            job = await self.stub.GetEnhancementJob(query, timeout=5)
+            if job.state == pb.ENHANCEMENT_STATE_COMPLETE:
+                break
+            await asyncio.sleep(0.02)
+        self.assertEqual(job.state, pb.ENHANCEMENT_STATE_COMPLETE)
+        self.assertEqual(job.text, "Clearer Hello")
         with self.assertRaises(grpc.aio.AioRpcError) as raised:
-            await self.stub.Enhance(pb.EnhanceRequest(
-                document_id=self.document_id, user_id="owner", text="Hello"
+            await self.stub.GetEnhancementJob(pb.EnhancementJobQuery(
+                document_id=self.document_id, user_id="other", job_id=reference.job_id
             ), timeout=5)
-        self.assertEqual(raised.exception.code(), grpc.StatusCode.UNIMPLEMENTED)
+        self.assertEqual(raised.exception.code(), grpc.StatusCode.NOT_FOUND)

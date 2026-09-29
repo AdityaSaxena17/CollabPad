@@ -224,3 +224,73 @@ export async function getSummaryJob(
   }
   return result as SummaryJobStatus;
 }
+
+export type EnhancementJobStatus = SummaryJobStatus;
+
+/** Starts a private rewrite of one selected paragraph. */
+export async function startEnhancement(
+  documentId: string,
+  text: string,
+  token: string,
+): Promise<string> {
+  if (!text.trim() || text.length > 2_000 || /[\r\n]/u.test(text)) {
+    throw new GatewayError(
+      text.length > 2_000 ? "Select no more than 2,000 characters." : "Select text within one paragraph.",
+      text.length > 2_000 ? 413 : 400,
+    );
+  }
+  let result: unknown;
+  try {
+    result = await request(
+      `/api/documents/${encodeURIComponent(documentId)}/ai/enhancement`,
+      token,
+      { method: "POST", body: JSON.stringify({ text }) },
+    );
+  } catch (cause) {
+    if (cause instanceof GatewayError && [503, 504].includes(cause.status)) {
+      throw new GatewayError("Enhancement service is busy or unavailable. Try again later.", cause.status);
+    }
+    throw cause;
+  }
+  if (typeof result !== "object" || result === null ||
+      !("jobId" in result) || typeof result.jobId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(result.jobId)) {
+    throw new GatewayError("The AI service returned an invalid enhancement job.", 502);
+  }
+  return result.jobId;
+}
+
+/** Polls a rewrite while the current user still has document access. */
+export async function getEnhancementJob(
+  documentId: string,
+  jobId: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<EnhancementJobStatus> {
+  let result: unknown;
+  try {
+    result = await request(
+      `/api/documents/${encodeURIComponent(documentId)}/ai/enhancement/jobs/${encodeURIComponent(jobId)}`,
+      token,
+      { signal },
+    );
+  } catch (cause) {
+    if (cause instanceof GatewayError && cause.status === 404) {
+      throw new GatewayError("This rewrite is no longer available. Select text and try again.", 404);
+    }
+    if (cause instanceof GatewayError && [503, 504].includes(cause.status)) {
+      throw new GatewayError("Enhancement service is unavailable. Try again.", cause.status);
+    }
+    throw cause;
+  }
+  if (typeof result !== "object" || result === null ||
+      !("status" in result) || typeof result.status !== "string" ||
+      !["queued", "running", "complete", "failed"].includes(result.status) ||
+      !("text" in result) || typeof result.text !== "string" ||
+      !("error" in result) || typeof result.error !== "string" ||
+      result.text.length > 4_000 || result.error.length > 500 ||
+      (result.status === "complete" && (!result.text.trim() || /[\r\n]/u.test(result.text)))) {
+    throw new GatewayError("The AI service returned an invalid rewrite status.", 502);
+  }
+  return result as EnhancementJobStatus;
+}

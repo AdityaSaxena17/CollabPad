@@ -113,11 +113,17 @@ class AiGatewayTest(unittest.TestCase):
                                     404,
                                 )
                             else:
-                                self.assertEqual(response.status_code, 501)
-                                self.assertEqual(
-                                    response.json()["detail"],
-                                    {"code": "task_not_implemented", "task": task},
-                                )
+                                self.assertEqual(response.status_code, 202)
+                                job_id = response.json()["jobId"]
+                                job_path = f"{base}/enhancement/jobs/{job_id}"
+                                for _ in range(50):
+                                    job = client.get(job_path, headers=owner)
+                                    if job.json()["status"] == "complete":
+                                        break
+                                    time.sleep(0.02)
+                                self.assertEqual(job.status_code, 200)
+                                self.assertEqual(job.json()["text"], "Clearer Improve this sentence.")
+                                self.assertEqual(client.get(job_path, headers=guest).status_code, 404)
 
                     no_session = client.post(
                         f"{base}/completion", json={"prefix": "Hello", "suffix": ""}
@@ -154,6 +160,17 @@ class AiGatewayTest(unittest.TestCase):
                         f"{base}/enhancement", headers=owner, json={"text": "  "}
                     )
                     self.assertEqual(blank.status_code, 400)
+                    multiline = client.post(
+                        f"{base}/enhancement", headers=owner, json={"text": "First\nSecond"}
+                    )
+                    self.assertEqual(multiline.status_code, 400)
+                    long_selection = client.post(
+                        f"{base}/enhancement", headers=owner, json={"text": "a" * 2001}
+                    )
+                    self.assertEqual(long_selection.status_code, 413)
+                    self.assertEqual(client.get(
+                        f"{base}/enhancement/jobs/not-a-uuid", headers=owner
+                    ).status_code, 400)
                     oversized = client.post(
                         f"{base}/summary", headers=owner, json={"text": "a" * 100_001}
                     )

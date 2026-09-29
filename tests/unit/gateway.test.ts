@@ -5,7 +5,9 @@ import {
   listDocuments,
   setDocumentSharing,
   completeText,
+  getEnhancementJob,
   getSummaryJob,
+  startEnhancement,
   startSummary,
 } from "@/lib/gateway";
 
@@ -112,4 +114,33 @@ test("starts and polls a private document summary", async () => {
   await expect(getSummaryJob(document.id, jobId, "token")).rejects.toMatchObject({ status: 502 });
   fetchMock.mockResolvedValueOnce({ ok: false, status: 404 } as Response);
   await expect(getSummaryJob(document.id, jobId, "token")).rejects.toThrow("no longer available");
+});
+
+test("starts and polls a private selected-text enhancement", async () => {
+  const fetchMock = vi.mocked(fetch);
+  const jobId = "1bf9b73e-6d83-41b2-9b6f-f91020ace005";
+  fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ jobId }) } as Response);
+  await expect(startEnhancement(document.id, "Draft sentence.", "token")).resolves.toBe(jobId);
+  expect(fetchMock).toHaveBeenCalledWith(
+    `http://localhost:18080/api/documents/${document.id}/ai/enhancement`,
+    expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ text: "Draft sentence." }),
+      headers: { Authorization: "Bearer token", "Content-Type": "application/json" },
+    }),
+  );
+  fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ status: "complete", text: "Clear sentence.", error: "" }) } as Response);
+  await expect(getEnhancementJob(document.id, jobId, "token")).resolves.toEqual({
+    status: "complete", text: "Clear sentence.", error: "",
+  });
+  expect(fetchMock).toHaveBeenCalledWith(
+    `http://localhost:18080/api/documents/${document.id}/ai/enhancement/jobs/${jobId}`,
+    expect.objectContaining({ headers: { Authorization: "Bearer token" } }),
+  );
+  await expect(startEnhancement(document.id, " ", "token")).rejects.toMatchObject({ status: 400 });
+  await expect(startEnhancement(document.id, "x".repeat(2001), "token")).rejects.toMatchObject({ status: 413 });
+  fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ status: "complete", text: "bad\nline", error: "" }) } as Response);
+  await expect(getEnhancementJob(document.id, jobId, "token")).rejects.toMatchObject({ status: 502 });
+  fetchMock.mockResolvedValueOnce({ ok: false, status: 404 } as Response);
+  await expect(getEnhancementJob(document.id, jobId, "token")).rejects.toThrow("no longer available");
 });

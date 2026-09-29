@@ -297,18 +297,48 @@ async def get_summary_job(document_id: str, job_id: str, request: Request):
     return {"status": state, "text": result.text, "error": result.error}
 
 
-@app.post("/api/documents/{document_id}/ai/enhancement")
+@app.post("/api/documents/{document_id}/ai/enhancement", status_code=202)
 async def enhance_text(document_id: str, body: EnhancementBody, request: Request):
     canonical_id, user_id = await authorize_ai_document(document_id, request)
-    require_ai_text(body.text, 8_000)
+    require_ai_text(body.text, 2_000)
+    if "\n" in body.text or "\r" in body.text:
+        raise HTTPException(status_code=400, detail="Select text within one paragraph.")
     try:
-        result = await request.app.state.llm_stub.Enhance(
+        result = await request.app.state.llm_stub.StartEnhancement(
             llm_pb.EnhanceRequest(document_id=canonical_id, user_id=user_id, text=body.text),
             timeout=10,
         )
     except grpc.aio.AioRpcError as error:
         raise llm_http_error(error, "enhancement") from error
-    return {"text": result.text}
+    return {"jobId": result.job_id}
+
+
+@app.get("/api/documents/{document_id}/ai/enhancement/jobs/{job_id}")
+async def get_enhancement_job(document_id: str, job_id: str, request: Request):
+    canonical_id, user_id = await authorize_ai_document(document_id, request)
+    try:
+        canonical_job_id = str(UUID(job_id))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail="Invalid AI job ID.") from error
+    try:
+        result = await request.app.state.llm_stub.GetEnhancementJob(
+            llm_pb.EnhancementJobQuery(
+                document_id=canonical_id, user_id=user_id, job_id=canonical_job_id,
+            ),
+            timeout=10,
+        )
+    except grpc.aio.AioRpcError as error:
+        raise llm_http_error(error, "enhancement") from error
+    states = {
+        llm_pb.ENHANCEMENT_STATE_QUEUED: "queued",
+        llm_pb.ENHANCEMENT_STATE_RUNNING: "running",
+        llm_pb.ENHANCEMENT_STATE_COMPLETE: "complete",
+        llm_pb.ENHANCEMENT_STATE_FAILED: "failed",
+    }
+    state = states.get(result.state)
+    if state is None:
+        raise HTTPException(status_code=503, detail="Invalid AI job status.")
+    return {"status": state, "text": result.text, "error": result.error}
 
 
 @app.websocket("/ws/documents/{document_id}")

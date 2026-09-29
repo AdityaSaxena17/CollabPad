@@ -9,6 +9,7 @@ import grpc
 from services.llm.service import LlmServicer
 from services.llm.completion import LlamaCompletionEngine
 from services.llm.summary import LlamaSummaryEngine
+from services.llm.enhancement import LlamaEnhancementEngine
 from services.llm.scheduler import ModelScheduler
 from services.proto import llm_pb2_grpc
 
@@ -26,7 +27,11 @@ async def main():
         LlamaSummaryEngine(engine.model, int(os.environ.get("LLM_N_CTX", "4096")))
         if engine is not None else None
     )
-    servicer = LlmServicer(engine, summary_engine, scheduler)
+    enhancement_engine = (
+        LlamaEnhancementEngine(engine.model, int(os.environ.get("LLM_N_CTX", "4096")))
+        if engine is not None else None
+    )
+    servicer = LlmServicer(engine, summary_engine, scheduler, enhancement_engine)
     server = grpc.aio.server(options=[("grpc.max_receive_message_length", 1_048_576)])
     llm_pb2_grpc.add_LlmServiceServicer_to_server(servicer, server)
     server.add_insecure_port("[::]:50052")

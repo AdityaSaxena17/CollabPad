@@ -75,3 +75,39 @@ test("document summary stays private and leaves shared text unchanged", async ({
     await guestContext.close();
   }
 });
+
+test("enhancement preview stays private until the selection is replaced", async ({ browser }) => {
+  const ownerContext = await browser.newContext();
+  const guestContext = await browser.newContext();
+  try {
+    const owner = await ownerContext.newPage();
+    const guest = await guestContext.newPage();
+    await owner.goto("/sign-in");
+    await clerk.signIn({ page: owner, emailAddress: process.env.E2E_OWNER_EMAIL! });
+    await owner.goto("/documents/new");
+    await owner.getByRole("button", { name: "Create document" }).click();
+    const documentUrl = owner.url();
+    await owner.getByRole("button", { name: "Share" }).click();
+    await owner.getByRole("button", { name: "Allow signed-in editors with link" }).click();
+    await owner.getByRole("button", { name: "Close sharing" }).click();
+
+    await guest.goto("/sign-in");
+    await clerk.signIn({ page: guest, emailAddress: process.env.E2E_GUEST_EMAIL! });
+    await guest.goto(documentUrl);
+    const ownerEditor = owner.locator('[contenteditable="true"][aria-label="Document content"]');
+    const guestEditor = guest.locator('[contenteditable="true"][aria-label="Document content"]');
+    await ownerEditor.fill("A shared draft about spring parks.");
+    await expect(guestEditor).toContainText("A shared draft about spring parks.");
+    await ownerEditor.locator("p").selectText();
+    await owner.getByRole("button", { name: "Enhance", exact: true }).click();
+    const panel = owner.getByRole("region", { name: "Enhance writing" });
+    await expect(panel).toContainText("Clearer A shared draft about spring parks.");
+    await expect(guest.getByRole("region", { name: "Enhance writing" })).toHaveCount(0);
+    await expect(guestEditor).toHaveText("A shared draft about spring parks.");
+    await panel.getByRole("button", { name: "Replace selection" }).click();
+    await expect(guestEditor).toHaveText("Clearer A shared draft about spring parks.");
+  } finally {
+    await ownerContext.close();
+    await guestContext.close();
+  }
+});

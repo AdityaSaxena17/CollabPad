@@ -6,7 +6,8 @@ service LlmService {
   rpc Complete(CompleteRequest) returns (TextResult);
   rpc StartSummary(SummaryRequest) returns (SummaryJobRef);
   rpc GetSummaryJob(SummaryJobQuery) returns (SummaryJobStatus);
-  rpc Enhance(EnhanceRequest) returns (TextResult);
+  rpc StartEnhancement(EnhanceRequest) returns (EnhancementJobRef);
+  rpc GetEnhancementJob(EnhancementJobQuery) returns (EnhancementJobStatus);
 }
 
 message CompleteRequest {
@@ -50,6 +51,30 @@ message EnhanceRequest {
   string document_id = 1;
   string user_id = 2;
   string text = 3;
+}
+
+message EnhancementJobRef {
+  string job_id = 1;
+}
+
+message EnhancementJobQuery {
+  string document_id = 1;
+  string user_id = 2;
+  string job_id = 3;
+}
+
+enum EnhancementState {
+  ENHANCEMENT_STATE_UNSPECIFIED = 0;
+  ENHANCEMENT_STATE_QUEUED = 1;
+  ENHANCEMENT_STATE_RUNNING = 2;
+  ENHANCEMENT_STATE_COMPLETE = 3;
+  ENHANCEMENT_STATE_FAILED = 4;
+}
+
+message EnhancementJobStatus {
+  EnhancementState state = 1;
+  string text = 2;
+  string error = 3;
 }
 
 message TextResult {
