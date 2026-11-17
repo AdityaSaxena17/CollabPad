@@ -1,0 +1,60 @@
+x-replica: &replica
+  build:
+    context: .
+    dockerfile: services/Dockerfile
+  command: ["python", "-m", "services.collaboration.replica"]
+  restart: unless-stopped
+
+x-raft-environment: &raft-environment
+  RAFT_PEERS: raft-1=raft-1:50051,raft-2=raft-2:50051,raft-3=raft-3:50051
+
+services:
+  raft-1:
+    <<: *replica
+    environment:
+      <<: *raft-environment
+      RAFT_NODE_ID: raft-1
+    volumes:
+      - raft_1_data:/var/lib/collabpad
+  raft-2:
+    <<: *replica
+    environment:
+      <<: *raft-environment
+      RAFT_NODE_ID: raft-2
+    volumes:
+      - raft_2_data:/var/lib/collabpad
+  raft-3:
+    <<: *replica
+    environment:
+      <<: *raft-environment
+      RAFT_NODE_ID: raft-3
+    volumes:
+      - raft_3_data:/var/lib/collabpad
+  collaboration:
+    profiles: ["legacy"]
+  raft-import:
+    profiles: ["import"]
+    <<: *replica
+    restart: "no"
+    command: ["python", "-m", "services.collaboration.import_legacy"]
+    environment:
+      <<: *raft-environment
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-collab_docs}
+      POSTGRES_USER: ${POSTGRES_USER:-collab_docs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-collab_docs_dev}
+  gateway:
+    environment:
+      COLLABORATION_CLUSTER: raft-1:50051,raft-2:50051,raft-3:50051
+    depends_on:
+      raft-1:
+        condition: service_started
+      raft-2:
+        condition: service_started
+      raft-3:
+        condition: service_started
+
+volumes:
+  raft_1_data:
+  raft_2_data:
+  raft_3_data:

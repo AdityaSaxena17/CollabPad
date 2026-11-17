@@ -7,6 +7,9 @@ service CollaborationService {
   rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse);
   rpc GetDocument(GetDocumentRequest) returns (Document);
   rpc SetSharing(SetSharingRequest) returns (Document);
+  rpc ImportDocument(ImportDocumentRequest) returns (Document);
+  rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse);
+  rpc GetVersion(GetVersionRequest) returns (DocumentVersion);
   rpc Sync(stream ClientEvent) returns (stream ServerEvent);
 }
 
@@ -21,6 +24,7 @@ message Document {
 message CreateDocumentRequest {
   string user_id = 1;
   string title = 2;
+  string operation_id = 3;
 }
 
 message ListDocumentsRequest {
@@ -40,6 +44,7 @@ message SetSharingRequest {
   string document_id = 1;
   string user_id = 2;
   bool enabled = 3;
+  string operation_id = 4;
 }
 
 message Join {
@@ -68,6 +73,8 @@ message ClientEvent {
 message Snapshot {
   bytes update = 1;
   string title = 2;
+  bool history_enabled = 3;
+  optional bool share_enabled = 4;
 }
 
 message CommittedEdit {
@@ -94,4 +101,39 @@ message ServerEvent {
     TitleChanged title_changed = 4;
     AccessRevoked access_revoked = 5;
   }
+}
+
+message ListVersionsRequest {
+  string document_id = 1;
+  string user_id = 2;
+  uint64 before = 3;
+}
+
+message VersionMetadata {
+  uint64 revision = 1;
+  string title = 2;
+  string actor_id = 3;
+  string timestamp = 4;
+  string kind = 5;
+}
+
+message ListVersionsResponse {
+  repeated VersionMetadata versions = 1;
+  uint64 next_before = 2;
+}
+
+message GetVersionRequest {
+  string document_id = 1;
+  string user_id = 2;
+  uint64 revision = 3;
+}
+
+message DocumentVersion {
+  VersionMetadata metadata = 1;
+  bytes update = 2;
+}
+
+message ImportDocumentRequest {
+  Document document = 1;
+  bytes update = 2;
 }

@@ -12,7 +12,12 @@ export FRONTEND_ORIGIN=http://localhost:3001
 export CLERK_SECRET_KEY=sk_test_integration_placeholder
 export DATABASE_URL=postgresql://collab_docs:collab_docs_dev@localhost:55433/collab_docs
 
-compose=(docker compose -p "$project" -f docker-compose.yml -f docker-compose.test.yml)
+case "${COMPOSE_RUNTIME:-docker}" in
+  docker) compose=(docker compose) ;;
+  podman) compose=(podman-compose) ;;
+  *) echo "COMPOSE_RUNTIME must be docker or podman." >&2; exit 2 ;;
+esac
+compose+=(-p "$project" -f docker-compose.yml -f docker-compose.test.yml)
 
 cleanup() {
   exit_code=$?

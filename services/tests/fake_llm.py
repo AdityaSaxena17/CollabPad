@@ -26,6 +26,10 @@ class FakeEnhancementEngine:
     async def improve(self, text: str, _scheduler) -> str:
         return f"Clearer {text}"
 
+    async def correct_grammar(self, text, scheduler):
+        return text.replace("She go ", "She goes ")
+
+
 
 async def main():
     server = grpc.aio.server()

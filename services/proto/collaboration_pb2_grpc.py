@@ -54,6 +54,21 @@ class CollaborationServiceStub:
                 request_serializer=services_dot_proto_dot_collaboration__pb2.SetSharingRequest.SerializeToString,
                 response_deserializer=services_dot_proto_dot_collaboration__pb2.Document.FromString,
                 _registered_method=True)
+        self.ImportDocument = channel.unary_unary(
+                '/collabdocs.v1.CollaborationService/ImportDocument',
+                request_serializer=services_dot_proto_dot_collaboration__pb2.ImportDocumentRequest.SerializeToString,
+                response_deserializer=services_dot_proto_dot_collaboration__pb2.Document.FromString,
+                _registered_method=True)
+        self.ListVersions = channel.unary_unary(
+                '/collabdocs.v1.CollaborationService/ListVersions',
+                request_serializer=services_dot_proto_dot_collaboration__pb2.ListVersionsRequest.SerializeToString,
+                response_deserializer=services_dot_proto_dot_collaboration__pb2.ListVersionsResponse.FromString,
+                _registered_method=True)
+        self.GetVersion = channel.unary_unary(
+                '/collabdocs.v1.CollaborationService/GetVersion',
+                request_serializer=services_dot_proto_dot_collaboration__pb2.GetVersionRequest.SerializeToString,
+                response_deserializer=services_dot_proto_dot_collaboration__pb2.DocumentVersion.FromString,
+                _registered_method=True)
         self.Sync = channel.stream_stream(
                 '/collabdocs.v1.CollaborationService/Sync',
                 request_serializer=services_dot_proto_dot_collaboration__pb2.ClientEvent.SerializeToString,
@@ -88,6 +103,24 @@ class CollaborationServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ImportDocument(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListVersions(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetVersion(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def Sync(self, request_iterator, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -116,6 +149,21 @@ def add_CollaborationServiceServicer_to_server(servicer, server):
                     servicer.SetSharing,
                     request_deserializer=services_dot_proto_dot_collaboration__pb2.SetSharingRequest.FromString,
                     response_serializer=services_dot_proto_dot_collaboration__pb2.Document.SerializeToString,
+            ),
+            'ImportDocument': grpc.unary_unary_rpc_method_handler(
+                    servicer.ImportDocument,
+                    request_deserializer=services_dot_proto_dot_collaboration__pb2.ImportDocumentRequest.FromString,
+                    response_serializer=services_dot_proto_dot_collaboration__pb2.Document.SerializeToString,
+            ),
+            'ListVersions': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListVersions,
+                    request_deserializer=services_dot_proto_dot_collaboration__pb2.ListVersionsRequest.FromString,
+                    response_serializer=services_dot_proto_dot_collaboration__pb2.ListVersionsResponse.SerializeToString,
+            ),
+            'GetVersion': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetVersion,
+                    request_deserializer=services_dot_proto_dot_collaboration__pb2.GetVersionRequest.FromString,
+                    response_serializer=services_dot_proto_dot_collaboration__pb2.DocumentVersion.SerializeToString,
             ),
             'Sync': grpc.stream_stream_rpc_method_handler(
                     servicer.Sync,
@@ -231,6 +279,87 @@ class CollaborationService:
             '/collabdocs.v1.CollaborationService/SetSharing',
             services_dot_proto_dot_collaboration__pb2.SetSharingRequest.SerializeToString,
             services_dot_proto_dot_collaboration__pb2.Document.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ImportDocument(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/collabdocs.v1.CollaborationService/ImportDocument',
+            services_dot_proto_dot_collaboration__pb2.ImportDocumentRequest.SerializeToString,
+            services_dot_proto_dot_collaboration__pb2.Document.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListVersions(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/collabdocs.v1.CollaborationService/ListVersions',
+            services_dot_proto_dot_collaboration__pb2.ListVersionsRequest.SerializeToString,
+            services_dot_proto_dot_collaboration__pb2.ListVersionsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetVersion(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/collabdocs.v1.CollaborationService/GetVersion',
+            services_dot_proto_dot_collaboration__pb2.GetVersionRequest.SerializeToString,
+            services_dot_proto_dot_collaboration__pb2.DocumentVersion.FromString,
             options,
             channel_credentials,
             insecure,

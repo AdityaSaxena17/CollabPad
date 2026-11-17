@@ -37,6 +37,16 @@ test("two signed-in editors share, save, and revoke a document", async ({ browse
     await expect(guest.locator(".document-footer [role=status]")).toContainText("Saved");
     await expect(owner.getByLabel(/other editors online/)).toBeVisible();
 
+    const history = owner.getByRole("button", { name: "Version history" });
+    await expect(guest.getByRole("button", { name: "Version history" })).toHaveCount(0);
+    await history.click();
+    const historyDialog = owner.getByRole("dialog", { name: "Version history" });
+    await historyDialog.getByRole("button", { name: /Version [0-9]+ · edit/ }).first().click();
+    const preview = historyDialog.getByRole("region", { name: "Version preview" });
+    await expect(preview).toContainText("Guest added more.");
+    await expect(preview.locator('[contenteditable="true"]')).toHaveCount(0);
+    await historyDialog.getByRole("button", { name: "Close" }).click();
+
     await owner.getByRole("button", { name: "Share" }).click();
     await owner.getByRole("button", { name: "Turn off link access" }).click();
     await expect(guest.getByRole("heading", { name: "Document unavailable" })).toBeVisible();

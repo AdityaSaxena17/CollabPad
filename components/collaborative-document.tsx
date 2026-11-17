@@ -69,6 +69,7 @@ function DocumentSession({ documentId }: { documentId: string }) {
   const awarenessMounts = useRef(0);
   const [document, setDocument] = useState<DocumentRecord | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [historyEnabled, setHistoryEnabled] = useState(false);
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [pendingCount, setPendingCount] = useState(0);
@@ -256,7 +257,12 @@ function DocumentSession({ documentId }: { documentId: string }) {
               "title" in message && typeof message.title === "string") {
               Y.applyUpdate(ydoc, decodeUpdate(message.update), "remote");
               const savedTitle = message.title;
-              setDocument((current) => current ? { ...current, title: savedTitle } : current);
+              setHistoryEnabled("historyEnabled" in message && message.historyEnabled === true);
+              const sharing = "shareEnabled" in message && typeof message.shareEnabled === "boolean"
+                ? message.shareEnabled : undefined;
+              setDocument((current) => current ? {
+                ...current, title: savedTitle, shareEnabled: sharing ?? current.shareEnabled,
+              } : current);
               snapshotReceived.current = true;
               setReady(true);
               setStatus("connected");
@@ -451,6 +457,7 @@ function DocumentSession({ documentId }: { documentId: string }) {
       status={status}
       pendingCount={pendingCount}
       isOwner={document.ownerId === userId}
+      historyEnabled={historyEnabled}
       onRename={rename}
       onSetSharing={setSharing}
     />

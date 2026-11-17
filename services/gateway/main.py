@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from services.gateway.cluster import ClusterClient
 from services.gateway.presence import LocalConnection, PresenceHub
 from services.proto import collaboration_pb2 as pb
 from services.proto import collaboration_pb2_grpc as rpc
@@ -39,7 +40,9 @@ async def lifespan(app: FastAPI):
         )
         llm_channel = grpc.aio.insecure_channel(LLM_TARGET)
         app.state.clerk = clerk
-        app.state.stub = rpc.CollaborationServiceStub(channel)
+        targets = os.environ.get("COLLABORATION_CLUSTER", "")
+        cluster = ClusterClient(targets.split(",")) if targets else None
+        app.state.stub = cluster or rpc.CollaborationServiceStub(channel)
         app.state.llm_stub = llm_rpc.LlmServiceStub(llm_channel)
         presence = PresenceHub(clerk)
         app.state.presence = presence
@@ -50,6 +53,8 @@ async def lifespan(app: FastAPI):
             presence_task.cancel()
             await asyncio.gather(presence_task, return_exceptions=True)
             await presence.close()
+            if cluster is not None:
+                await cluster.close()
             await channel.close()
             await llm_channel.close()
 
@@ -82,6 +87,7 @@ class SummaryBody(BaseModel):
 
 class EnhancementBody(BaseModel):
     text: str
+    grammarOnly: bool = False
 
 
 def document_json(document: pb.Document) -> dict:
@@ -231,6 +237,44 @@ async def set_sharing(document_id: str, body: SetSharingBody, request: Request):
     return document_json(document)
 
 
+def version_json(version):
+    return {
+        "revision": version.revision, "title": version.title, "actorId": version.actor_id,
+        "timestamp": version.timestamp, "kind": version.kind,
+    }
+
+
+@app.get("/api/documents/{document_id}/versions")
+async def list_versions(document_id: str, request: Request, before: int = 0):
+    user_id = await current_user(request)
+    if not 0 <= before < 2**64:
+        raise HTTPException(status_code=400, detail="Invalid revision cursor.")
+    try:
+        result = await request.app.state.stub.ListVersions(
+            pb.ListVersionsRequest(document_id=document_id, user_id=user_id, before=before),
+            timeout=5,
+        )
+    except grpc.aio.AioRpcError as error:
+        raise grpc_http_error(error) from error
+    return {"versions": [version_json(version) for version in result.versions],
+            "nextBefore": result.next_before}
+
+
+@app.get("/api/documents/{document_id}/versions/{revision}")
+async def get_version(document_id: str, revision: int, request: Request):
+    user_id = await current_user(request)
+    if not 1 <= revision < 2**64:
+        raise HTTPException(status_code=404, detail="Version not found.")
+    try:
+        result = await request.app.state.stub.GetVersion(
+            pb.GetVersionRequest(document_id=document_id, user_id=user_id, revision=revision),
+            timeout=5,
+        )
+    except grpc.aio.AioRpcError as error:
+        raise grpc_http_error(error) from error
+    return {**version_json(result.metadata), "update": base64.b64encode(result.update).decode()}
+
+
 @app.post("/api/documents/{document_id}/ai/completion")
 async def complete_text(document_id: str, body: CompletionBody, request: Request):
     canonical_id, user_id = await authorize_ai_document(document_id, request)
@@ -305,7 +349,9 @@ async def enhance_text(document_id: str, body: EnhancementBody, request: Request
         raise HTTPException(status_code=400, detail="Select text within one paragraph.")
     try:
         result = await request.app.state.llm_stub.StartEnhancement(
-            llm_pb.EnhanceRequest(document_id=canonical_id, user_id=user_id, text=body.text),
+            llm_pb.EnhanceRequest(
+                document_id=canonical_id, user_id=user_id, text=body.text, grammar_only=body.grammarOnly,
+            ),
             timeout=10,
         )
     except grpc.aio.AioRpcError as error:
@@ -361,10 +407,14 @@ async def document_socket(websocket: WebSocket, document_id: str):
         await websocket.close(code=1008)
         return
 
-    call = websocket.app.state.stub.Sync()
+    stub = websocket.app.state.stub
+    call = None
     try:
+        call = await stub.open_sync() if isinstance(stub, ClusterClient) else stub.Sync()
         await call.write(pb.ClientEvent(join=pb.Join(document_id=document_id, user_id=user_id)))
     except grpc.aio.AioRpcError:
+        if call is not None:
+            call.cancel()
         await websocket.close(code=1011)
         return
     send_lock = asyncio.Lock()
@@ -465,6 +515,9 @@ async def document_socket(websocket: WebSocket, document_id: str):
                             "type": "snapshot",
                             "update": base64.b64encode(event.snapshot.update).decode("ascii"),
                             "title": event.snapshot.title,
+                            "historyEnabled": event.snapshot.history_enabled,
+                            **({"shareEnabled": event.snapshot.share_enabled}
+                               if event.snapshot.HasField("share_enabled") else {}),
                         }
                     )
                     presence_connection = LocalConnection(

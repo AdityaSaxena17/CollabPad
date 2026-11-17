@@ -19,7 +19,7 @@ export function WritingEnhancementPanel({ enhancement, connected }: {
       className="fixed top-16 right-3 z-40 flex max-h-[min(75vh,640px)] w-[min(420px,calc(100vw-24px))] flex-col overflow-auto rounded-2xl border border-[#dadce0] bg-white p-4 shadow-xl"
     >
       <div className="flex items-center justify-between gap-3">
-        <h2 id="enhancement-heading" className="text-base font-semibold">Enhance writing</h2>
+        <h2 id="enhancement-heading" className="text-base font-semibold">{enhancement.grammarOnly ? "Grammar correction" : "Enhance writing"}</h2>
         <button type="button" onClick={enhancement.close} aria-label="Close enhancement" className="rounded-full p-2 hover:bg-[#f1f3f4]">
           <X aria-hidden="true" size={18} />
         </button>
@@ -35,7 +35,7 @@ export function WritingEnhancementPanel({ enhancement, connected }: {
       </p>}
       {enhancement.phase === "complete" && (
         <section className="mt-4 border-t border-[#dadce0] pt-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-[#5f6368]">Suggested rewrite</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-[#5f6368]">{enhancement.grammarOnly ? "Suggested correction" : "Suggested rewrite"}</h3>
           <p className="mt-1 whitespace-pre-wrap text-sm leading-6">{enhancement.text}</p>
           {changed ? (
             <button

@@ -47,6 +47,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+import { DocumentVersionHistory } from "@/components/document-version-history";
 import { CollabMark } from "@/components/collab-mark";
 import { AiCompletionPreview } from "@/components/ai-completion-preview";
 import {
@@ -76,6 +77,7 @@ type DocumentEditorProps = {
   currentUserId: string;
   pendingCount: number;
   isOwner: boolean;
+  historyEnabled?: boolean;
   onRename: (title: string) => void;
   onSetSharing: (enabled: boolean) => Promise<void>;
 };
@@ -176,6 +178,7 @@ export function DocumentEditor({
   currentUserId,
   pendingCount,
   isOwner,
+  historyEnabled,
   onRename,
   onSetSharing,
 }: DocumentEditorProps) {
@@ -523,7 +526,8 @@ export function DocumentEditor({
                 <MenuItem label="Clear formatting" onSelect={clearFormatting} disabled={status !== "connected"} />
               </EditorMenu>
               <EditorMenu label="Tools">
-                <MenuItem label="Grammar correction" hint="Backend required" disabled />
+                <MenuItem label="Grammar correction" disabled={status !== "connected" || !formatting?.hasSelection}
+                  onSelect={() => { summary.close(); enhancement.startGrammar(); }} />
                 <MenuItem label="Summarize document" onSelect={startSummary} disabled={status !== "connected" || !formatting?.wordCount} />
                 <MenuItem label="Enhance writing" onSelect={startEnhancement} disabled={status !== "connected" || !formatting?.hasSelection} />
               </EditorMenu>
@@ -596,6 +600,7 @@ export function DocumentEditor({
             <span className="hidden sm:inline">Enhance</span>
             <span className="sr-only sm:hidden">Enhance selected writing</span>
           </button>
+          {isOwner && historyEnabled && <DocumentVersionHistory documentId={document.id} ownerId={document.ownerId} />}
           <button
             type="button"
             disabled={!isOwner}

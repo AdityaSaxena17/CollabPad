@@ -24,7 +24,14 @@ EXAMPLES = (
 )
 
 
-def enhancement_prompt(source: str) -> str:
+def enhancement_prompt(source: str, grammar_only: bool = False) -> str:
+    if grammar_only:
+        return (
+            "Correct only grammar, spelling, and punctuation. Preserve wording where it is "
+            "grammatically correct, and preserve meaning, facts, names, numbers, and tone. "
+            "Return only the corrected paragraph. If it is already correct, return it verbatim.\n"
+            f"Source: {source}\nRewrite:"
+        )
     return f"{EXAMPLES}Source: {source}\nRewrite:"
 
 
@@ -44,14 +51,16 @@ def clean_enhancement(value: object) -> str:
 class EnhancementEngine(Protocol):
     async def improve(self, text: str, scheduler: ModelScheduler) -> str: ...
 
+    async def correct_grammar(self, text: str, scheduler: ModelScheduler) -> str: ...
+
 
 class LlamaEnhancementEngine:
     def __init__(self, model, context_size: int):
         self.model = model
         self.context_size = context_size
 
-    def _generate(self, text: str) -> str:
-        prompt = enhancement_prompt(text)
+    def _generate(self, text: str, grammar_only: bool = False) -> str:
+        prompt = enhancement_prompt(text, grammar_only)
         if len(self.model.tokenize(prompt.encode("utf-8"), add_bos=False)) + ENHANCEMENT_OUTPUT_TOKENS > self.context_size:
             raise ValueError("The selection does not fit the model context.")
         self.model.reset()
@@ -66,3 +75,6 @@ class LlamaEnhancementEngine:
 
     async def improve(self, text: str, scheduler: ModelScheduler) -> str:
         return await scheduler.run(self._generate, text)
+
+    async def correct_grammar(self, text: str, scheduler: ModelScheduler) -> str:
+        return await scheduler.run(self._generate, text, True)

@@ -232,6 +232,7 @@ export async function startEnhancement(
   documentId: string,
   text: string,
   token: string,
+  grammarOnly = false,
 ): Promise<string> {
   if (!text.trim() || text.length > 2_000 || /[\r\n]/u.test(text)) {
     throw new GatewayError(
@@ -244,7 +245,7 @@ export async function startEnhancement(
     result = await request(
       `/api/documents/${encodeURIComponent(documentId)}/ai/enhancement`,
       token,
-      { method: "POST", body: JSON.stringify({ text }) },
+      { method: "POST", body: JSON.stringify(grammarOnly ? { text, grammarOnly } : { text }) },
     );
   } catch (cause) {
     if (cause instanceof GatewayError && [503, 504].includes(cause.status)) {
@@ -293,4 +294,24 @@ export async function getEnhancementJob(
     throw new GatewayError("The AI service returned an invalid rewrite status.", 502);
   }
   return result as EnhancementJobStatus;
+}
+
+export type VersionMetadata = {
+  revision: number;
+  title: string;
+  actorId: string;
+  timestamp: string;
+  kind: string;
+};
+
+export async function listDocumentVersions(documentId: string, token: string, before = 0) {
+  return await request(
+    `/api/documents/${encodeURIComponent(documentId)}/versions?before=${before}`, token,
+  ) as { versions: VersionMetadata[]; nextBefore: number };
+}
+
+export async function getDocumentVersion(documentId: string, revision: number, token: string) {
+  return await request(
+    `/api/documents/${encodeURIComponent(documentId)}/versions/${revision}`, token,
+  ) as VersionMetadata & { update: string };
 }

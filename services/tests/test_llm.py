@@ -68,3 +68,19 @@ class LlmStubTest(unittest.IsolatedAsyncioTestCase):
                 document_id=self.document_id, user_id="other", job_id=reference.job_id
             ), timeout=5)
         self.assertEqual(raised.exception.code(), grpc.StatusCode.NOT_FOUND)
+
+    async def test_grammar_correction_uses_its_own_prompt_mode(self):
+        reference = await self.stub.StartEnhancement(pb.EnhanceRequest(
+            document_id=self.document_id, user_id="owner", text="She go home.", grammar_only=True,
+        ), timeout=5)
+        query = pb.EnhancementJobQuery(
+            document_id=self.document_id, user_id="owner", job_id=reference.job_id,
+        )
+        async with asyncio.timeout(5):
+            while True:
+                job = await self.stub.GetEnhancementJob(query, timeout=5)
+                if job.state in (pb.ENHANCEMENT_STATE_COMPLETE, pb.ENHANCEMENT_STATE_FAILED):
+                    break
+                await asyncio.sleep(0.02)
+        self.assertEqual(job.state, pb.ENHANCEMENT_STATE_COMPLETE)
+        self.assertEqual(job.text, "She goes home.")

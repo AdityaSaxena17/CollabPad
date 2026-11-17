@@ -51,6 +51,7 @@ message EnhanceRequest {
   string document_id = 1;
   string user_id = 2;
   string text = 3;
+  bool grammar_only = 4;
 }
 
 message EnhancementJobRef {

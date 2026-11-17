@@ -47,6 +47,7 @@ class _EnhancementJob:
     document_id: str
     user_id: str
     source: str
+    grammar_only: bool = False
     state: int = llm_pb2.ENHANCEMENT_STATE_QUEUED
     text: str = ""
     error: str = ""
@@ -199,7 +200,8 @@ class LlmServicer(llm_pb2_grpc.LlmServiceServicer):
             await context.abort(grpc.StatusCode.UNAVAILABLE, "Enhancement service is busy.")
         job_id = str(uuid4())
         self.enhancement_jobs[job_id] = _EnhancementJob(
-            document_id=request.document_id, user_id=request.user_id, source=request.text
+            document_id=request.document_id, user_id=request.user_id, source=request.text,
+            grammar_only=request.grammar_only,
         )
         self.enhancement_queue.put_nowait(job_id)
         if self.enhancement_worker is None or self.enhancement_worker.done():
@@ -212,8 +214,12 @@ class LlmServicer(llm_pb2_grpc.LlmServiceServicer):
             job = self.enhancement_jobs[job_id]
             job.state = llm_pb2.ENHANCEMENT_STATE_RUNNING
             try:
+                generate = (
+                    self.enhancement_engine.correct_grammar if job.grammar_only
+                    else self.enhancement_engine.improve
+                )
                 result = await asyncio.wait_for(
-                    self.enhancement_engine.improve(job.source, self.scheduler),
+                    generate(job.source, self.scheduler),
                     timeout=30 * 60,
                 )
                 job.text = clean_enhancement(result)

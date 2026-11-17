@@ -15,16 +15,21 @@ export NEXT_PUBLIC_GATEWAY_WS_URL=ws://localhost:18081
 
 node -e 'require("@next/env").loadEnvConfig(process.cwd()); for (const name of ["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "CLERK_SECRET_KEY", "E2E_OWNER_EMAIL", "E2E_GUEST_EMAIL"]) { if (!process.env[name]) { console.error(`${name} is required for the live Clerk browser suite.`); process.exitCode = 1; } }'
 
-compose=(docker compose -p "$project" -f docker-compose.yml -f docker-compose.test.yml)
+case "${COMPOSE_RUNTIME:-docker}" in
+  docker) compose=(docker compose) ;;
+  podman) compose=(podman-compose) ;;
+  *) echo "COMPOSE_RUNTIME must be docker or podman." >&2; exit 2 ;;
+esac
+compose+=(-p "$project" -f docker-compose.yml -f docker-compose.test.yml -f docker-compose.raft.yml)
 
 cleanup() {
   exit_code=$?
   if (( exit_code != 0 )); then
-    "${compose[@]}" logs --tail=80 postgres migrate collaboration redis llm gateway || true
+    "${compose[@]}" logs --tail=80 postgres raft-1 raft-2 raft-3 redis llm gateway || true
   fi
   "${compose[@]}" down -v --remove-orphans >/dev/null || true
 }
 trap cleanup EXIT
 
-"${compose[@]}" up --build -d postgres migrate collaboration redis llm gateway
+"${compose[@]}" up --build -d postgres raft-1 raft-2 raft-3 redis llm gateway
 npx playwright test

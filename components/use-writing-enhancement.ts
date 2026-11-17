@@ -15,6 +15,7 @@ type EnhancementPhase = "idle" | "submitting" | "queued" | "running" | "complete
 
 export function useWritingEnhancement(editor: Editor | null, documentId: string, status: string) {
   const { getToken } = useAuth();
+  const grammarOnly = useRef(false);
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<EnhancementPhase>("idle");
   const [source, setSource] = useState("");
@@ -110,7 +111,9 @@ export function useWritingEnhancement(editor: Editor | null, documentId: string,
       const token = await getToken();
       if (!token) throw new Error("Sign in to use AI enhancement.");
       if (currentVersion !== version.current) return;
-      const id = await startEnhancement(documentId, selection.source, token);
+      const id = grammarOnly.current
+        ? await startEnhancement(documentId, selection.source, token, true)
+        : await startEnhancement(documentId, selection.source, token);
       if (currentVersion !== version.current) return;
       jobId.current = id;
       setPhase("queued");
@@ -123,10 +126,11 @@ export function useWritingEnhancement(editor: Editor | null, documentId: string,
     }
   }
 
-  function start() {
+  function startWithMode(correctGrammar: boolean) {
     if (!editor || status !== "connected" || pending.current) return;
     const captured = captureEnhancementSelection(editor);
     close();
+    grammarOnly.current = correctGrammar;
     setOpen(true);
     if (typeof captured === "string") {
       setPhase("error");
@@ -175,5 +179,8 @@ export function useWritingEnhancement(editor: Editor | null, documentId: string,
     editor.commands.focus();
   }
 
-  return { open, phase, source, text, error, stale, start, retry, apply, close };
+  return {
+    open, grammarOnly: grammarOnly.current, phase, source, text, error, stale,
+    start: () => startWithMode(false), startGrammar: () => startWithMode(true), retry, apply, close,
+  };
 }
