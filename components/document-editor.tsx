@@ -19,7 +19,6 @@ import {
   Cloud,
   CloudOff,
   Highlighter,
-  History,
   IndentIncrease,
   Italic,
   Link2,
@@ -595,15 +594,9 @@ export function DocumentEditor({
               )}
             </div>
           ) : null}
-          <button
-            type="button"
-            disabled
-            title="Version history requires the Raft-backed service"
-            aria-label="Version history requires the backend"
-            className="hidden size-9 place-items-center rounded-full text-[#9aa0a6] disabled:cursor-not-allowed md:grid"
-          >
-            <History aria-hidden="true" size={19} />
-          </button>
+          {isOwner && (
+            <DocumentVersionHistory documentId={document.id} ownerId={document.ownerId} disabled={!historyEnabled} />
+          )}
           <button
             type="button"
             disabled={status !== "connected" || !formatting?.wordCount}
@@ -626,7 +619,6 @@ export function DocumentEditor({
             <span className="hidden sm:inline">Enhance</span>
             <span className="sr-only sm:hidden">Enhance selected writing</span>
           </button>
-          {isOwner && historyEnabled && <DocumentVersionHistory documentId={document.id} ownerId={document.ownerId} />}
           <button
             type="button"
             disabled={!isOwner}
