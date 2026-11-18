@@ -1,0 +1,42 @@
+services:
+  postgres:
+    ports: !reset []
+  gateway:
+    ports: !reset []
+    environment:
+      FRONTEND_ORIGIN: https://${COLLABPAD_HOSTNAME:?Set COLLABPAD_HOSTNAME}
+  llm:
+    volumes: !reset []
+    environment:
+      AWS_REGION: ${AWS_REGION:-ap-south-1}
+      BEDROCK_COMPLETION_MODEL_ID: ${BEDROCK_COMPLETION_MODEL_ID:-apac.amazon.nova-micro-v1:0}
+      BEDROCK_WRITING_MODEL_ID: ${BEDROCK_WRITING_MODEL_ID:-apac.amazon.nova-lite-v1:0}
+  web:
+    build:
+      context: .
+      dockerfile: deploy/aws/Dockerfile.web
+      args:
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?Set the Clerk publishable key}
+        NEXT_PUBLIC_GATEWAY_HTTP_URL: https://${COLLABPAD_HOSTNAME:?Set COLLABPAD_HOSTNAME}
+        NEXT_PUBLIC_GATEWAY_WS_URL: wss://${COLLABPAD_HOSTNAME:?Set COLLABPAD_HOSTNAME}
+    environment:
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?Set the Clerk secret key}
+      CLERK_WEBHOOK_SIGNING_SECRET: ${CLERK_WEBHOOK_SIGNING_SECRET:-}
+      DATABASE_URL: ${AWS_WEB_DATABASE_URL:?Set AWS_WEB_DATABASE_URL for the internal PostgreSQL host}
+    restart: unless-stopped
+  proxy:
+    image: docker.io/library/caddy:2-alpine
+    environment:
+      COLLABPAD_HOSTNAME: ${COLLABPAD_HOSTNAME:?Set COLLABPAD_HOSTNAME}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/aws/Caddyfile:/etc/caddy/Caddyfile:ro,z
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,10 @@
+{$COLLABPAD_HOSTNAME} {
+	@app_api path /api/documents /api/documents/* /ws/documents/*
+	handle @app_api {
+		reverse_proxy gateway:8000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

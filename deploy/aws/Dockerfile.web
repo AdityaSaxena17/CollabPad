@@ -1,0 +1,12 @@
+FROM docker.io/library/node:22-bookworm-slim
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ARG NEXT_PUBLIC_GATEWAY_HTTP_URL
+ARG NEXT_PUBLIC_GATEWAY_WS_URL
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build -- --webpack
+EXPOSE 3000
+CMD ["npm", "run", "start", "--", "--hostname", "0.0.0.0"]

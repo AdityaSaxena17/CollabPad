@@ -79,6 +79,18 @@ For a targeted correction, select text and choose **Tools → Grammar correction
 
 Select up to 2,000 characters within one paragraph, heading, or list item, then use **Enhance** or **Tools → Enhance writing**. The private panel shows the original and proposed plain-text rewrite. **Replace selection** applies it as one shared edit while keeping the selection's uniform formatting; **Close enhancement** discards it. Edits inside the selected range make the preview stale and disable replacement, while edits elsewhere can move its range safely. The gateway starts a temporary job with `POST /api/documents/{id}/ai/enhancement` and polls `GET /api/documents/{id}/ai/enhancement/jobs/{jobId}`. Both requests verify access and use gRPC to the LLM service. The four-job limit is shared with summaries, and autocomplete has priority between background model calls.
 
+## Bedrock inference
+
+To run the Raft stack with the Bedrock provider on an AWS host, include the Bedrock Compose override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.raft.yml -f docker-compose.bedrock.yml up --build -d
+```
+
+The override uses Amazon Nova Micro for inline completion and Amazon Nova Lite for summaries, selection enhancement, and grammar correction. Set `BEDROCK_COMPLETION_MODEL_ID`, `BEDROCK_WRITING_MODEL_ID`, and `AWS_REGION` to override those defaults. The default Region is `us-east-1`.
+
+The LLM container uses the AWS SDK credential chain. On EC2, attach an instance profile with `bedrock:InvokeModel` scoped to both selected models in the configured Region. With IMDSv2 required, set the metadata response hop limit to 2 for the bridge-networked container. The Bedrock image needs no GGUF file. For the HTTPS deployment and end-to-end checks, follow the [EC2 demo runbook](deploy/aws/README.md).
+
 ## Presence and live carets
 
 Redis runs privately in Compose; it is not involved in document saves. Each open editor socket has a 45-second Redis presence key, refreshed every 15 seconds while the gateway keeps that socket alive. Clean closes remove the key immediately. Redis Pub/Sub announces joins, leaves, and cursor updates; key-expiry notifications announce crashed connections. A document-scoped index helps find keys, but snapshots check that every presence key still exists and discard stale index entries. These are the only two Redis key types used for presence; Yjs client IDs are not separately reserved. Gateways subscribe before resynchronizing on Redis reconnection, and re-register their still-open sockets after Redis recovery. There is no periodic Redis presence poll.

@@ -1,0 +1,10 @@
+services:
+  llm:
+    build:
+      context: .
+      dockerfile: services/Dockerfile.bedrock
+    environment:
+      LLM_PROVIDER: bedrock
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      BEDROCK_COMPLETION_MODEL_ID: ${BEDROCK_COMPLETION_MODEL_ID:-amazon.nova-micro-v1:0}
+      BEDROCK_WRITING_MODEL_ID: ${BEDROCK_WRITING_MODEL_ID:-amazon.nova-lite-v1:0}

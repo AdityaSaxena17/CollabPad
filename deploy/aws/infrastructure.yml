@@ -1,0 +1,233 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: A single EC2 host for the CollabPad HTTPS demo, plus private release transport and a scoped Bedrock instance profile.
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+Parameters:
+  Ami:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/noble/stable/current/amd64/hvm/ebs-gp3/ami-id
+Resources:
+  DemoVpc:
+    Type: AWS::EC2::VPC
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Isolates the deployment from other environments.
+        must: Provide DNS for the EC2 host.
+    Properties:
+      CidrBlock: 10.42.0.0/24
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Routes public HTTPS and AWS API traffic.
+        must: Attach to the demo VPC.
+  InternetAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Connects the demo network to the public internet.
+        must: Attach only to the demo VPC.
+    Properties:
+      VpcId: !Ref DemoVpc
+      InternetGatewayId: !Ref InternetGateway
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Hosts the single public demo instance.
+        must: Keep application reachability scoped by WebIngress.
+    Properties:
+      VpcId: !Ref DemoVpc
+      CidrBlock: 10.42.0.0/26
+      MapPublicIpOnLaunch: true
+  PublicRoutes:
+    Type: AWS::EC2::RouteTable
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Defines routes for the demo subnet.
+        must: Belong to the demo VPC.
+    Properties:
+      VpcId: !Ref DemoVpc
+  InternetRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetAttachment
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Provides internet egress and an HTTPS return path.
+        must: Use the demo internet gateway.
+    Properties:
+      RouteTableId: !Ref PublicRoutes
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  SubnetRoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Applies the public routes to the demo subnet.
+        must: Associate the public demo subnet only.
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRoutes
+  ReleaseBucket:
+    Type: AWS::S3::Bucket
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Transfers the application release privately to the instance.
+        must: Block public access and store release code only.
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  ReleaseBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Enforces encrypted release transfer.
+        must: Deny requests over plaintext.
+    Properties:
+      Bucket: !Ref ReleaseBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource: [!GetAtt ReleaseBucket.Arn, !Sub '${ReleaseBucket.Arn}/*']
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+  DemoRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Gives EC2 managed access and application credentials.
+        must: Scope model, artifact, and configuration access to this deployment.
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: AppRuntime
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource:
+                  - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/apac.amazon.nova-micro-v1:0
+                  - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/apac.amazon.nova-lite-v1:0
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource:
+                  - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-micro-v1:0
+                  - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-lite-v1:0
+                Condition:
+                  ArnEquals:
+                    bedrock:InferenceProfileArn:
+                      - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/apac.amazon.nova-micro-v1:0
+                      - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/apac.amazon.nova-lite-v1:0
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub '${ReleaseBucket.Arn}/app.tar.gz'
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/app-env
+  DemoProfile:
+    Type: AWS::IAM::InstanceProfile
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Delivers temporary credentials to EC2.
+        must: Use the demo role.
+    Properties:
+      Roles: [!Ref DemoRole]
+  WebIngress:
+    Type: AWS::EC2::SecurityGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Serves the requested public HTTPS demo.
+        must: Expose only the HTTPS proxy and its HTTP redirect.
+    Properties:
+      GroupDescription: Public HTTP and HTTPS for the CollabPad demo
+      VpcId: !Ref DemoVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP redirect and certificate validation
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Public HTTPS and WSS
+  DemoHost:
+    Type: AWS::EC2::Instance
+    DependsOn: [InternetRoute, SubnetRoutes]
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Runs the three Raft replicas and browser-facing services.
+        must: Require IMDSv2 and encrypt the disk containing the replica volumes.
+    Properties:
+      ImageId: !Ref Ami
+      InstanceType: t3.large
+      IamInstanceProfile: !Ref DemoProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds: [!Ref WebIngress]
+      MetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 2
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            Encrypted: true
+            VolumeType: gp3
+            VolumeSize: 35
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y docker.io docker-compose-v2 curl unzip
+          cli_dir=$(mktemp -d)
+          curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o "$cli_dir/aws.zip"
+          unzip -q "$cli_dir/aws.zip" -d "$cli_dir"
+          "$cli_dir/aws/install"
+          rm -rf "$cli_dir"
+          systemctl enable --now docker
+          install -d -m 0700 /opt/collabpad
+  DemoAddress:
+    Type: AWS::EC2::EIP
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Keeps the DNS target stable across instance stops.
+        must: Attach to the demo host.
+    Properties:
+      Domain: vpc
+      InstanceId: !Ref DemoHost
+Outputs:
+  InstanceId:
+    Value: !Ref DemoHost
+  PublicIp:
+    Value: !Ref DemoAddress
+  ReleaseBucketName:
+    Value: !Ref ReleaseBucket
