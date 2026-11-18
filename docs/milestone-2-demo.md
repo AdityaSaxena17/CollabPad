@@ -29,4 +29,4 @@ Keep the live monitor open and start the probe in a separate terminal with the s
 "${compose[@]}" --profile import run --build --rm --no-deps raft-import python -m services.tests.raft_probe
 ```
 
-The probe uses ten gRPC editor sessions, verifies 500 unique Yjs edits and 501 history entries, and reports acknowledgement latency.
+The probe uses ten gRPC editor sessions under one owner, verifies all 500 unique Yjs edits in the latest history revision, checks that history revisions are contiguous, and reports acknowledgement latency. Normally there are two history entries: creation and one grouped edit session. A long pause during failover can split the edits into additional sessions; history entry count is independent of the number of Raft commits.
