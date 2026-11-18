@@ -80,6 +80,7 @@ type DocumentEditorProps = {
   historyEnabled?: boolean;
   onRename: (title: string) => void;
   onSetSharing: (enabled: boolean) => Promise<void>;
+  onDelete: () => Promise<void>;
 };
 
 type ToolbarButtonProps = {
@@ -206,6 +207,7 @@ export function DocumentEditor({
   historyEnabled,
   onRename,
   onSetSharing,
+  onDelete,
 }: DocumentEditorProps) {
   const router = useRouter();
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
@@ -371,6 +373,16 @@ export function DocumentEditor({
     }
   }
 
+  async function deleteThisDocument() {
+    if (!window.confirm(`Delete "${document.title}"? It will be removed for everyone and cannot be undone.`)) return;
+    try {
+      await onDelete();
+      router.replace("/documents");
+    } catch (cause) {
+      window.alert(cause instanceof Error ? cause.message : "Could not delete the document.");
+    }
+  }
+
   function updateBlockType(value: string) {
     if (!editor) {
       return;
@@ -508,6 +520,7 @@ export function DocumentEditor({
             <div className="hidden items-center gap-1 sm:flex">
               <EditorMenu label="File">
                 <MenuItem label="Print" hint="Ctrl+P" onSelect={() => window.print()} />
+                {isOwner && <MenuItem label="Delete document" onSelect={() => void deleteThisDocument()} />}
               </EditorMenu>
               <EditorMenu label="Edit">
                 <MenuItem

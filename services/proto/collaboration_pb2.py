@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\"services/proto/collaboration.proto\x12\rcollabdocs.v1\"b\n\x08\x44ocument\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05title\x18\x02 \x01(\t\x12\x10\n\x08owner_id\x18\x03 \x01(\t\x12\x15\n\rshare_enabled\x18\x04 \x01(\x08\x12\x12\n\nupdated_at\x18\x05 \x01(\t\"M\n\x15\x43reateDocumentRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\r\n\x05title\x18\x02 \x01(\t\x12\x14\n\x0coperation_id\x18\x03 \x01(\t\"\'\n\x14ListDocumentsRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\"C\n\x15ListDocumentsResponse\x12*\n\tdocuments\x18\x01 \x03(\x0b\x32\x17.collabdocs.v1.Document\":\n\x12GetDocumentRequest\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\"`\n\x11SetSharingRequest\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0f\n\x07\x65nabled\x18\x03 \x01(\x08\x12\x14\n\x0coperation_id\x18\x04 \x01(\t\",\n\x04Join\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\",\n\x04\x45\x64it\x12\x14\n\x0coperation_id\x18\x01 \x01(\t\x12\x0e\n\x06update\x18\x02 \x01(\x0c\"-\n\x06Rename\x12\r\n\x05title\x18\x01 \x01(\t\x12\x14\n\x0coperation_id\x18\x02 \x01(\t\"\x89\x01\n\x0b\x43lientEvent\x12#\n\x04join\x18\x01 \x01(\x0b\x32\x13.collabdocs.v1.JoinH\x00\x12#\n\x04\x65\x64it\x18\x02 \x01(\x0b\x32\x13.collabdocs.v1.EditH\x00\x12\'\n\x06rename\x18\x03 \x01(\x0b\x32\x15.collabdocs.v1.RenameH\x00\x42\x07\n\x05\x65vent\"p\n\x08Snapshot\x12\x0e\n\x06update\x18\x01 \x01(\x0c\x12\r\n\x05title\x18\x02 \x01(\t\x12\x17\n\x0fhistory_enabled\x18\x03 \x01(\x08\x12\x1a\n\rshare_enabled\x18\x04 \x01(\x08H\x00\x88\x01\x01\x42\x10\n\x0e_share_enabled\"5\n\rCommittedEdit\x12\x14\n\x0coperation_id\x18\x01 \x01(\t\x12\x0e\n\x06update\x18\x02 \x01(\x0c\"+\n\x13\x45\x64itAcknowledgement\x12\x14\n\x0coperation_id\x18\x01 \x01(\t\"3\n\x0cTitleChanged\x12\r\n\x05title\x18\x01 \x01(\t\x12\x14\n\x0coperation_id\x18\x02 \x01(\t\"\x0f\n\rAccessRevoked\"\x9e\x02\n\x0bServerEvent\x12+\n\x08snapshot\x18\x01 \x01(\x0b\x32\x17.collabdocs.v1.SnapshotH\x00\x12,\n\x04\x65\x64it\x18\x02 \x01(\x0b\x32\x1c.collabdocs.v1.CommittedEditH\x00\x12=\n\x0f\x61\x63knowledgement\x18\x03 \x01(\x0b\x32\".collabdocs.v1.EditAcknowledgementH\x00\x12\x34\n\rtitle_changed\x18\x04 \x01(\x0b\x32\x1b.collabdocs.v1.TitleChangedH\x00\x12\x36\n\x0e\x61\x63\x63\x65ss_revoked\x18\x05 \x01(\x0b\x32\x1c.collabdocs.v1.AccessRevokedH\x00\x42\x07\n\x05\x65vent\"K\n\x13ListVersionsRequest\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0e\n\x06\x62\x65\x66ore\x18\x03 \x01(\x04\"e\n\x0fVersionMetadata\x12\x10\n\x08revision\x18\x01 \x01(\x04\x12\r\n\x05title\x18\x02 \x01(\t\x12\x10\n\x08\x61\x63tor_id\x18\x03 \x01(\t\x12\x11\n\ttimestamp\x18\x04 \x01(\t\x12\x0c\n\x04kind\x18\x05 \x01(\t\"]\n\x14ListVersionsResponse\x12\x30\n\x08versions\x18\x01 \x03(\x0b\x32\x1e.collabdocs.v1.VersionMetadata\x12\x13\n\x0bnext_before\x18\x02 \x01(\x04\"K\n\x11GetVersionRequest\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x10\n\x08revision\x18\x03 \x01(\x04\"S\n\x0f\x44ocumentVersion\x12\x30\n\x08metadata\x18\x01 \x01(\x0b\x32\x1e.collabdocs.v1.VersionMetadata\x12\x0e\n\x06update\x18\x02 \x01(\x0c\"R\n\x15ImportDocumentRequest\x12)\n\x08\x64ocument\x18\x01 \x01(\x0b\x32\x17.collabdocs.v1.Document\x12\x0e\n\x06update\x18\x02 \x01(\x0c\x32\x95\x05\n\x14\x43ollaborationService\x12O\n\x0e\x43reateDocument\x12$.collabdocs.v1.CreateDocumentRequest\x1a\x17.collabdocs.v1.Document\x12Z\n\rListDocuments\x12#.collabdocs.v1.ListDocumentsRequest\x1a$.collabdocs.v1.ListDocumentsResponse\x12I\n\x0bGetDocument\x12!.collabdocs.v1.GetDocumentRequest\x1a\x17.collabdocs.v1.Document\x12G\n\nSetSharing\x12 .collabdocs.v1.SetSharingRequest\x1a\x17.collabdocs.v1.Document\x12O\n\x0eImportDocument\x12$.collabdocs.v1.ImportDocumentRequest\x1a\x17.collabdocs.v1.Document\x12W\n\x0cListVersions\x12\".collabdocs.v1.ListVersionsRequest\x1a#.collabdocs.v1.ListVersionsResponse\x12N\n\nGetVersion\x12 .collabdocs.v1.GetVersionRequest\x1a\x1e.collabdocs.v1.DocumentVersion\x12\x42\n\x04Sync\x12\x1a.collabdocs.v1.ClientEvent\x1a\x1a.collabdocs.v1.ServerEvent(\x01\x30\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\"services/proto/collaboration.proto\x12\rcollabdocs.v1\"b\n\x08\x44ocument\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05title\x18\x02 \x01(\t\x12\x10\n\x08owner_id\x18\x03 \x01(\t\x12\x15\n\rshare_enabled\x18\x04 \x01(\x08\x12\x12\n\nupdated_at\x18\x05 \x01(\t\"M\n\x15\x43reateDocumentRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\r\n\x05title\x18\x02 \x01(\t\x12\x14\n\x0coperation_id\x18\x03 \x01(\t\"\'\n\x14ListDocumentsRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\"C\n\x15ListDocumentsResponse\x12*\n\tdocuments\x18\x01 \x03(\x0b\x32\x17.collabdocs.v1.Document\":\n\x12GetDocumentRequest\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\"`\n\x11SetSharingRequest\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0f\n\x07\x65nabled\x18\x03 \x01(\x08\x12\x14\n\x0coperation_id\x18\x04 \x01(\t\"S\n\x15\x44\x65leteDocumentRequest\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x14\n\x0coperation_id\x18\x03 \x01(\t\"\x18\n\x16\x44\x65leteDocumentResponse\",\n\x04Join\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\",\n\x04\x45\x64it\x12\x14\n\x0coperation_id\x18\x01 \x01(\t\x12\x0e\n\x06update\x18\x02 \x01(\x0c\"-\n\x06Rename\x12\r\n\x05title\x18\x01 \x01(\t\x12\x14\n\x0coperation_id\x18\x02 \x01(\t\"\x89\x01\n\x0b\x43lientEvent\x12#\n\x04join\x18\x01 \x01(\x0b\x32\x13.collabdocs.v1.JoinH\x00\x12#\n\x04\x65\x64it\x18\x02 \x01(\x0b\x32\x13.collabdocs.v1.EditH\x00\x12\'\n\x06rename\x18\x03 \x01(\x0b\x32\x15.collabdocs.v1.RenameH\x00\x42\x07\n\x05\x65vent\"p\n\x08Snapshot\x12\x0e\n\x06update\x18\x01 \x01(\x0c\x12\r\n\x05title\x18\x02 \x01(\t\x12\x17\n\x0fhistory_enabled\x18\x03 \x01(\x08\x12\x1a\n\rshare_enabled\x18\x04 \x01(\x08H\x00\x88\x01\x01\x42\x10\n\x0e_share_enabled\"5\n\rCommittedEdit\x12\x14\n\x0coperation_id\x18\x01 \x01(\t\x12\x0e\n\x06update\x18\x02 \x01(\x0c\"+\n\x13\x45\x64itAcknowledgement\x12\x14\n\x0coperation_id\x18\x01 \x01(\t\"3\n\x0cTitleChanged\x12\r\n\x05title\x18\x01 \x01(\t\x12\x14\n\x0coperation_id\x18\x02 \x01(\t\"\x0f\n\rAccessRevoked\"\x11\n\x0f\x44ocumentDeleted\"\xda\x02\n\x0bServerEvent\x12+\n\x08snapshot\x18\x01 \x01(\x0b\x32\x17.collabdocs.v1.SnapshotH\x00\x12,\n\x04\x65\x64it\x18\x02 \x01(\x0b\x32\x1c.collabdocs.v1.CommittedEditH\x00\x12=\n\x0f\x61\x63knowledgement\x18\x03 \x01(\x0b\x32\".collabdocs.v1.EditAcknowledgementH\x00\x12\x34\n\rtitle_changed\x18\x04 \x01(\x0b\x32\x1b.collabdocs.v1.TitleChangedH\x00\x12\x36\n\x0e\x61\x63\x63\x65ss_revoked\x18\x05 \x01(\x0b\x32\x1c.collabdocs.v1.AccessRevokedH\x00\x12:\n\x10\x64ocument_deleted\x18\x06 \x01(\x0b\x32\x1e.collabdocs.v1.DocumentDeletedH\x00\x42\x07\n\x05\x65vent\"K\n\x13ListVersionsRequest\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0e\n\x06\x62\x65\x66ore\x18\x03 \x01(\x04\"e\n\x0fVersionMetadata\x12\x10\n\x08revision\x18\x01 \x01(\x04\x12\r\n\x05title\x18\x02 \x01(\t\x12\x10\n\x08\x61\x63tor_id\x18\x03 \x01(\t\x12\x11\n\ttimestamp\x18\x04 \x01(\t\x12\x0c\n\x04kind\x18\x05 \x01(\t\"]\n\x14ListVersionsResponse\x12\x30\n\x08versions\x18\x01 \x03(\x0b\x32\x1e.collabdocs.v1.VersionMetadata\x12\x13\n\x0bnext_before\x18\x02 \x01(\x04\"K\n\x11GetVersionRequest\x12\x13\n\x0b\x64ocument_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x10\n\x08revision\x18\x03 \x01(\x04\"S\n\x0f\x44ocumentVersion\x12\x30\n\x08metadata\x18\x01 \x01(\x0b\x32\x1e.collabdocs.v1.VersionMetadata\x12\x0e\n\x06update\x18\x02 \x01(\x0c\"R\n\x15ImportDocumentRequest\x12)\n\x08\x64ocument\x18\x01 \x01(\x0b\x32\x17.collabdocs.v1.Document\x12\x0e\n\x06update\x18\x02 \x01(\x0c\x32\xf4\x05\n\x14\x43ollaborationService\x12O\n\x0e\x43reateDocument\x12$.collabdocs.v1.CreateDocumentRequest\x1a\x17.collabdocs.v1.Document\x12Z\n\rListDocuments\x12#.collabdocs.v1.ListDocumentsRequest\x1a$.collabdocs.v1.ListDocumentsResponse\x12I\n\x0bGetDocument\x12!.collabdocs.v1.GetDocumentRequest\x1a\x17.collabdocs.v1.Document\x12G\n\nSetSharing\x12 .collabdocs.v1.SetSharingRequest\x1a\x17.collabdocs.v1.Document\x12]\n\x0e\x44\x65leteDocument\x12$.collabdocs.v1.DeleteDocumentRequest\x1a%.collabdocs.v1.DeleteDocumentResponse\x12O\n\x0eImportDocument\x12$.collabdocs.v1.ImportDocumentRequest\x1a\x17.collabdocs.v1.Document\x12W\n\x0cListVersions\x12\".collabdocs.v1.ListVersionsRequest\x1a#.collabdocs.v1.ListVersionsResponse\x12N\n\nGetVersion\x12 .collabdocs.v1.GetVersionRequest\x1a\x1e.collabdocs.v1.DocumentVersion\x12\x42\n\x04Sync\x12\x1a.collabdocs.v1.ClientEvent\x1a\x1a.collabdocs.v1.ServerEvent(\x01\x30\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -43,38 +43,44 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GETDOCUMENTREQUEST']._serialized_end=400
   _globals['_SETSHARINGREQUEST']._serialized_start=402
   _globals['_SETSHARINGREQUEST']._serialized_end=498
-  _globals['_JOIN']._serialized_start=500
-  _globals['_JOIN']._serialized_end=544
-  _globals['_EDIT']._serialized_start=546
-  _globals['_EDIT']._serialized_end=590
-  _globals['_RENAME']._serialized_start=592
-  _globals['_RENAME']._serialized_end=637
-  _globals['_CLIENTEVENT']._serialized_start=640
-  _globals['_CLIENTEVENT']._serialized_end=777
-  _globals['_SNAPSHOT']._serialized_start=779
-  _globals['_SNAPSHOT']._serialized_end=891
-  _globals['_COMMITTEDEDIT']._serialized_start=893
-  _globals['_COMMITTEDEDIT']._serialized_end=946
-  _globals['_EDITACKNOWLEDGEMENT']._serialized_start=948
-  _globals['_EDITACKNOWLEDGEMENT']._serialized_end=991
-  _globals['_TITLECHANGED']._serialized_start=993
-  _globals['_TITLECHANGED']._serialized_end=1044
-  _globals['_ACCESSREVOKED']._serialized_start=1046
-  _globals['_ACCESSREVOKED']._serialized_end=1061
-  _globals['_SERVEREVENT']._serialized_start=1064
-  _globals['_SERVEREVENT']._serialized_end=1350
-  _globals['_LISTVERSIONSREQUEST']._serialized_start=1352
-  _globals['_LISTVERSIONSREQUEST']._serialized_end=1427
-  _globals['_VERSIONMETADATA']._serialized_start=1429
-  _globals['_VERSIONMETADATA']._serialized_end=1530
-  _globals['_LISTVERSIONSRESPONSE']._serialized_start=1532
-  _globals['_LISTVERSIONSRESPONSE']._serialized_end=1625
-  _globals['_GETVERSIONREQUEST']._serialized_start=1627
-  _globals['_GETVERSIONREQUEST']._serialized_end=1702
-  _globals['_DOCUMENTVERSION']._serialized_start=1704
-  _globals['_DOCUMENTVERSION']._serialized_end=1787
-  _globals['_IMPORTDOCUMENTREQUEST']._serialized_start=1789
-  _globals['_IMPORTDOCUMENTREQUEST']._serialized_end=1871
-  _globals['_COLLABORATIONSERVICE']._serialized_start=1874
-  _globals['_COLLABORATIONSERVICE']._serialized_end=2535
+  _globals['_DELETEDOCUMENTREQUEST']._serialized_start=500
+  _globals['_DELETEDOCUMENTREQUEST']._serialized_end=583
+  _globals['_DELETEDOCUMENTRESPONSE']._serialized_start=585
+  _globals['_DELETEDOCUMENTRESPONSE']._serialized_end=609
+  _globals['_JOIN']._serialized_start=611
+  _globals['_JOIN']._serialized_end=655
+  _globals['_EDIT']._serialized_start=657
+  _globals['_EDIT']._serialized_end=701
+  _globals['_RENAME']._serialized_start=703
+  _globals['_RENAME']._serialized_end=748
+  _globals['_CLIENTEVENT']._serialized_start=751
+  _globals['_CLIENTEVENT']._serialized_end=888
+  _globals['_SNAPSHOT']._serialized_start=890
+  _globals['_SNAPSHOT']._serialized_end=1002
+  _globals['_COMMITTEDEDIT']._serialized_start=1004
+  _globals['_COMMITTEDEDIT']._serialized_end=1057
+  _globals['_EDITACKNOWLEDGEMENT']._serialized_start=1059
+  _globals['_EDITACKNOWLEDGEMENT']._serialized_end=1102
+  _globals['_TITLECHANGED']._serialized_start=1104
+  _globals['_TITLECHANGED']._serialized_end=1155
+  _globals['_ACCESSREVOKED']._serialized_start=1157
+  _globals['_ACCESSREVOKED']._serialized_end=1172
+  _globals['_DOCUMENTDELETED']._serialized_start=1174
+  _globals['_DOCUMENTDELETED']._serialized_end=1191
+  _globals['_SERVEREVENT']._serialized_start=1194
+  _globals['_SERVEREVENT']._serialized_end=1540
+  _globals['_LISTVERSIONSREQUEST']._serialized_start=1542
+  _globals['_LISTVERSIONSREQUEST']._serialized_end=1617
+  _globals['_VERSIONMETADATA']._serialized_start=1619
+  _globals['_VERSIONMETADATA']._serialized_end=1720
+  _globals['_LISTVERSIONSRESPONSE']._serialized_start=1722
+  _globals['_LISTVERSIONSRESPONSE']._serialized_end=1815
+  _globals['_GETVERSIONREQUEST']._serialized_start=1817
+  _globals['_GETVERSIONREQUEST']._serialized_end=1892
+  _globals['_DOCUMENTVERSION']._serialized_start=1894
+  _globals['_DOCUMENTVERSION']._serialized_end=1977
+  _globals['_IMPORTDOCUMENTREQUEST']._serialized_start=1979
+  _globals['_IMPORTDOCUMENTREQUEST']._serialized_end=2061
+  _globals['_COLLABORATIONSERVICE']._serialized_start=2064
+  _globals['_COLLABORATIONSERVICE']._serialized_end=2820
 # @@protoc_insertion_point(module_scope)

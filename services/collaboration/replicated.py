@@ -94,6 +94,14 @@ class ReplicatedCollaboration(rpc.CollaborationServiceServicer):
             return None
         if not self._allowed(document, actor):
             return grpc.StatusCode.NOT_FOUND
+        if kind == "delete":
+            if document.metadata.owner_id != actor:
+                return grpc.StatusCode.NOT_FOUND
+            del self.documents[document_id]
+            for subscriber in tuple(document.subscribers):
+                self._close(subscriber, pb.ServerEvent(document_deleted=pb.DocumentDeleted()))
+            document.subscribers.clear()
+            return None
         if kind == "sharing":
             if document.metadata.owner_id != actor:
                 return grpc.StatusCode.NOT_FOUND
@@ -247,7 +255,7 @@ class ReplicatedCollaboration(rpc.CollaborationServiceServicer):
             update = base64.b64encode(initial.get_update()).decode()
         await self._propose(context, "create", request.user_id, document_id, operation,
                             title=title, update=update)
-        return self.documents[document_id].metadata
+        return await self._existing_metadata(document_id, context)
 
     async def ImportDocument(self, request, context):
         legacy = request.document
@@ -264,7 +272,7 @@ class ReplicatedCollaboration(rpc.CollaborationServiceServicer):
             title=legacy.title, enabled=legacy.share_enabled, legacy_updated_at=legacy.updated_at,
             update=base64.b64encode(request.update).decode(),
         )
-        return self.documents[document_id].metadata
+        return await self._existing_metadata(document_id, context)
 
     async def ListDocuments(self, request, context):
         await self._require_user(request.user_id, context)
@@ -289,7 +297,21 @@ class ReplicatedCollaboration(rpc.CollaborationServiceServicer):
         operation = await self._uuid(request.operation_id, context) if request.operation_id else str(uuid4())
         await self._propose(context, "sharing", request.user_id, document_id, operation,
                             enabled=request.enabled)
-        return self.documents[document_id].metadata
+        return await self._existing_metadata(document_id, context)
+
+    async def DeleteDocument(self, request, context):
+        await self._require_user(request.user_id, context)
+        document_id = await self._uuid(request.document_id, context)
+        operation = await self._uuid(request.operation_id, context) if request.operation_id else str(uuid4())
+        await self._propose(context, "delete", request.user_id, document_id, operation)
+        return pb.DeleteDocumentResponse()
+
+    async def _existing_metadata(self, document_id, context):
+        """Metadata after a committed write, or NOT_FOUND if a retry raced a delete."""
+        document = self.documents.get(document_id)
+        if document is None:
+            await context.abort(grpc.StatusCode.NOT_FOUND, "Document not found.")
+        return document.metadata
 
     async def Sync(self, request_iterator, context):
         first = await anext(request_iterator, None)

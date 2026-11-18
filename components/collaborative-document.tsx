@@ -12,6 +12,7 @@ import {
 } from "y-protocols/awareness";
 import { DocumentEditor } from "@/components/document-editor";
 import {
+  deleteDocument,
   gatewayWebSocketUrl,
   getDocument,
   setDocumentSharing,
@@ -69,6 +70,7 @@ function DocumentSession({ documentId }: { documentId: string }) {
   const awarenessMounts = useRef(0);
   const [document, setDocument] = useState<DocumentRecord | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [deniedReason, setDeniedReason] = useState("");
   const [historyEnabled, setHistoryEnabled] = useState(false);
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
@@ -365,6 +367,11 @@ function DocumentSession({ documentId }: { documentId: string }) {
                 pending.current.delete(message.id);
                 setPendingCount(pending.current.size + Number(bufferedUpdates.current.length > 0));
               }
+            } else if (message.type === "document_deleted") {
+              denied.current = true;
+              setDeniedReason("This document was deleted by its owner.");
+              setStatus("denied");
+              socket.close();
             } else if (message.type === "access_revoked" || message.type === "access_denied") {
               denied.current = true;
               setStatus("denied");
@@ -426,12 +433,18 @@ function DocumentSession({ documentId }: { documentId: string }) {
     setDocument(updated);
   }
 
+  async function removeDocument() {
+    const token = await getToken();
+    if (!token) throw new Error("Sign in to delete this document.");
+    await deleteDocument(documentId, token);
+  }
+
   if (loadError || status === "denied") {
     return (
       <main className="grid min-h-screen place-items-center bg-[#f8fafd] px-4 text-[#202124]">
         <div className="max-w-md rounded-xl border border-[#dadce0] bg-white p-8 text-center">
           <h1 className="text-xl font-medium">Document unavailable</h1>
-          <p role="alert" className="mt-3 text-sm text-[#5f6368]">{loadError || "Access to this document was revoked."}</p>
+          <p role="alert" className="mt-3 text-sm text-[#5f6368]">{loadError || deniedReason || "Access to this document was revoked."}</p>
           <Link href="/documents" className="mt-5 inline-block text-sm text-[#1967d2]">Back to documents</Link>
         </div>
       </main>
@@ -460,6 +473,7 @@ function DocumentSession({ documentId }: { documentId: string }) {
       historyEnabled={historyEnabled}
       onRename={rename}
       onSetSharing={setSharing}
+      onDelete={removeDocument}
     />
   );
 }

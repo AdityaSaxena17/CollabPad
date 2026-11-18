@@ -60,6 +60,7 @@ async function request(path: string, token: string, init?: RequestInit): Promise
     );
   }
 
+  if (response.status === 204) return null;
   return response.json();
 }
 
@@ -115,6 +116,11 @@ export async function setDocumentSharing(
     throw new GatewayError("The gateway returned an invalid document.", 502);
   }
   return result;
+}
+
+/** Permanently deletes a document; only its owner may do this. */
+export async function deleteDocument(documentId: string, token: string): Promise<void> {
+  await request(`/api/documents/${encodeURIComponent(documentId)}`, token, { method: "DELETE" });
 }
 
 /** Requests a plain-text continuation at the current editor cursor. */

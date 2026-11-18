@@ -12,7 +12,7 @@ import grpc
 import httpx
 from clerk_backend_api import Clerk
 from clerk_backend_api.security.types import AuthenticateRequestOptions
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -63,7 +63,7 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[FRONTEND_ORIGIN],
-    allow_methods=["GET", "POST", "PATCH"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -235,6 +235,18 @@ async def set_sharing(document_id: str, body: SetSharingBody, request: Request):
     except grpc.aio.AioRpcError as error:
         raise grpc_http_error(error) from error
     return document_json(document)
+
+
+@app.delete("/api/documents/{document_id}", status_code=204)
+async def delete_document(document_id: str, request: Request):
+    user_id = await current_user(request)
+    try:
+        await request.app.state.stub.DeleteDocument(
+            pb.DeleteDocumentRequest(document_id=document_id, user_id=user_id), timeout=5
+        )
+    except grpc.aio.AioRpcError as error:
+        raise grpc_http_error(error) from error
+    return Response(status_code=204)
 
 
 def version_json(version):
@@ -551,6 +563,10 @@ async def document_socket(websocket: WebSocket, document_id: str):
                     )
                 elif kind == "access_revoked":
                     await send({"type": "access_revoked"})
+                    await websocket.close(code=1008)
+                    return
+                elif kind == "document_deleted":
+                    await send({"type": "document_deleted"})
                     await websocket.close(code=1008)
                     return
             await send({"type": "service_unavailable"})
