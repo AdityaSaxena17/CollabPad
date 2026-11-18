@@ -24,6 +24,15 @@ Requirements: Node.js 20.9+, Docker Compose or Podman with podman-compose, and a
 
    For the other Compose commands below, replace `docker compose` with `podman-compose` when using Podman. The three Raft replicas each start with a separate SQLite volume. PostgreSQL initializes the Clerk webhook tables on its first start.
 
+   After pulling backend changes, rebuild and recreate with **both Compose files**:
+
+   ```bash
+   podman-compose -f docker-compose.yml -f docker-compose.raft.yml up --build --force-recreate -d
+   podman-compose -f docker-compose.yml -f docker-compose.raft.yml exec raft-1 python -m services.raft.status
+   ```
+
+   Running only `podman-compose up --build -d` starts the legacy PostgreSQL collaboration service and routes the gateway away from Raft, even if old Raft containers are still running. If documents were saved in legacy mode, use the migration procedure below before switching back. Keep the existing volumes; do not use `down -v` to rebuild.
+
 4. Start Next.js on port 3000:
 
    ```bash
@@ -40,7 +49,7 @@ The browser uses a WebSocket to the Python gateway. The gateway verifies the Cle
 
 Documents start private. The owner can enable or disable editing by any signed-in person with the document URL. Disabling sharing closes active guest streams. The dashboard lists documents owned by the signed-in user; a shared document opens through its link. The old static sample documents have been removed because they were never persisted.
 
-Each replica stores its votes, log, and commit index in SQLite. On restart it rebuilds document state, deduplication receipts, and version history by replaying the committed prefix. Reads use a quorum-committed Raft barrier. The fixed three-member cluster supports one failed replica. The full log is retained for this milestone. The PostgreSQL `users` and `clerk_webhook_events` tables support Clerk webhooks, and Clerk remains the source of truth for identity.
+Each replica stores its votes, log, and commit index in SQLite. On restart it rebuilds document state, deduplication receipts, and version history by replaying the committed prefix. Reads confirm leadership with a fresh heartbeat quorum and wait for the read index to be applied; they do not append log entries. Expect the commit index to advance on writes, not when opening documents or viewing history. Consecutive edits by one author share a history version until a two-minute pause, a ten-minute session span, another author, or a rename, while each edit batch still commits through Raft. The fixed three-member cluster supports one failed replica. The full log is retained for this milestone. The PostgreSQL `users` and `clerk_webhook_events` tables support Clerk webhooks, and Clerk remains the source of truth for identity.
 
 Editors become read-only while disconnected. A warning appears when leaving with unacknowledged changes; a full browser refresh before acknowledgement can lose those local changes. Owners can open **Version history** for a read-only formatted preview of committed edits and renames. Text completion, document summaries, selected-text enhancement, and grammar correction use the separate local LLM service.
 
