@@ -133,3 +133,22 @@ class RaftClusterTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(grpc.aio.AioRpcError) as unavailable:
             await self.client.GetDocument(pb.GetDocumentRequest(document_id=document.id, user_id=owner), timeout=2)
         self.assertIn(unavailable.exception.code(), (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED))
+
+    async def test_reads_do_not_append_log_entries(self):
+        leader = await self.leader()
+        owner = "owner"
+        document = await self.client.CreateDocument(pb.CreateDocumentRequest(user_id=owner))
+        node = self.replicas[leader][0]
+        tip = node.storage.tip()[0]
+        commit = node.storage.state().commit_index
+
+        await self.client.GetDocument(pb.GetDocumentRequest(document_id=document.id, user_id=owner))
+        await self.client.ListDocuments(pb.ListDocumentsRequest(user_id=owner))
+        await self.client.ListVersions(pb.ListVersionsRequest(document_id=document.id, user_id=owner))
+        stream = await self.client.open_sync()
+        self.addCleanup(stream.cancel)
+        await stream.write(pb.ClientEvent(join=pb.Join(document_id=document.id, user_id=owner)))
+        self.assertTrue((await asyncio.wait_for(stream.read(), timeout=5)).HasField("snapshot"))
+
+        self.assertEqual(node.storage.tip()[0], tip)
+        self.assertEqual(node.storage.state().commit_index, commit)

@@ -4,7 +4,7 @@ import asyncio
 import base64
 import json
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import grpc
@@ -16,6 +16,12 @@ from services.proto import collaboration_pb2_grpc as rpc
 from services.raft.node import LeaderUnavailable
 from services.raft.storage import Entry
 
+# Consecutive edits by one person fold into a single version until they pause
+# or the session runs long. Times come from the committed command, so every
+# replica (and every replay) forms identical groups.
+VERSION_IDLE_GAP = timedelta(minutes=2)
+VERSION_MAX_SPAN = timedelta(minutes=10)
+
 
 @dataclass
 class Document:
@@ -23,6 +29,8 @@ class Document:
     body: Doc = field(default_factory=Doc)
     versions: list[tuple[pb.VersionMetadata, bytes | None]] = field(default_factory=list)
     checkpoints: dict[int, bytes] = field(default_factory=dict)
+    # Start time of the newest version while it can still absorb edits.
+    open_edit_started: datetime | None = None
     subscribers: set[Subscriber] = field(default_factory=set)
 
 
@@ -126,6 +134,11 @@ class ReplicatedCollaboration(rpc.CollaborationServiceServicer):
         return merge_updates(*updates)
 
     def _record_version(self, document, command, update):
+        if self._extend_edit_version(document, command, update):
+            return
+        document.open_edit_started = (
+            datetime.fromisoformat(command["time"]) if command["kind"] == "edit" else None
+        )
         revision = len(document.versions) + 1
         document.versions.append((pb.VersionMetadata(
             revision=revision, title=document.metadata.title, actor_id=command["actor"],
@@ -134,10 +147,30 @@ class ReplicatedCollaboration(rpc.CollaborationServiceServicer):
         if revision % 100 == 0:
             document.checkpoints[revision] = self._version_update(document, revision)
 
+    def _extend_edit_version(self, document, command, update):
+        """Fold an edit into the newest version when it continues the same session."""
+        if command["kind"] != "edit" or document.open_edit_started is None:
+            return False
+        last, last_update = document.versions[-1]
+        now = datetime.fromisoformat(command["time"])
+        if (
+            last.actor_id != command["actor"]
+            or now - datetime.fromisoformat(last.timestamp) > VERSION_IDLE_GAP
+            or now - document.open_edit_started > VERSION_MAX_SPAN
+        ):
+            return False
+        last.timestamp = command["time"]
+        document.versions[-1] = (last, merge_updates(last_update, update))
+        revision = len(document.versions)
+        if revision in document.checkpoints:
+            del document.checkpoints[revision]
+            document.checkpoints[revision] = self._version_update(document, revision)
+        return True
+
     async def _history_document(self, request, context):
         await self._require_user(request.user_id, context)
         document_id = await self._uuid(request.document_id, context)
-        await self._propose(context)
+        await self._read_barrier(context)
         document = self.documents.get(document_id)
         if document is None or document.metadata.owner_id != request.user_id:
             await context.abort(grpc.StatusCode.NOT_FOUND, "Document not found.")
@@ -161,23 +194,28 @@ class ReplicatedCollaboration(rpc.CollaborationServiceServicer):
             update=self._version_update(document, request.revision),
         )
 
-    async def _propose(self, context, kind="", actor="", document_id="", operation_id="", **payload):
+    async def _read_barrier(self, context):
+        try:
+            await self.node.read_barrier()
+        except LeaderUnavailable:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "Raft leader unavailable.")
+
+    async def _propose(self, context, kind, actor, document_id, operation_id, **payload):
         command = {
             "kind": kind, "actor": actor, "document_id": document_id,
             "operation_id": operation_id, "time": datetime.now(UTC).isoformat(), **payload,
         }
         try:
-            index = await self.node.propose(json.dumps(command).encode() if kind else b"")
+            index = await self.node.propose(json.dumps(command).encode())
         except LeaderUnavailable:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "Raft leader unavailable.")
-        if kind:
-            previous, error, original_index = self.operations[operation_id]
-            ignored = {"time", "update"} if kind == "create" else {"time"}
-            if any(previous.get(key) != value for key, value in command.items() if key not in ignored):
-                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Operation ID already used.")
-            if error is not None:
-                await context.abort(error, "Document operation rejected.")
-            return original_index == index
+        previous, error, original_index = self.operations[operation_id]
+        ignored = {"time", "update"} if kind == "create" else {"time"}
+        if any(previous.get(key) != value for key, value in command.items() if key not in ignored):
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Operation ID already used.")
+        if error is not None:
+            await context.abort(error, "Document operation rejected.")
+        return original_index == index
 
     @staticmethod
     async def _uuid(value, context):
@@ -230,7 +268,7 @@ class ReplicatedCollaboration(rpc.CollaborationServiceServicer):
 
     async def ListDocuments(self, request, context):
         await self._require_user(request.user_id, context)
-        await self._propose(context)
+        await self._read_barrier(context)
         return pb.ListDocumentsResponse(documents=sorted(
             (doc.metadata for doc in self.documents.values() if doc.metadata.owner_id == request.user_id),
             key=lambda meta: (meta.updated_at, meta.id), reverse=True,
@@ -239,7 +277,7 @@ class ReplicatedCollaboration(rpc.CollaborationServiceServicer):
     async def GetDocument(self, request, context):
         await self._require_user(request.user_id, context)
         document_id = await self._uuid(request.document_id, context)
-        await self._propose(context)
+        await self._read_barrier(context)
         document = self.documents.get(document_id)
         if not self._allowed(document, request.user_id):
             await context.abort(grpc.StatusCode.NOT_FOUND, "Document not found.")
@@ -260,7 +298,7 @@ class ReplicatedCollaboration(rpc.CollaborationServiceServicer):
         actor = first.join.user_id
         await self._require_user(actor, context)
         document_id = await self._uuid(first.join.document_id, context)
-        await self._propose(context)
+        await self._read_barrier(context)
         document = self.documents.get(document_id)
         if not self._allowed(document, actor):
             await context.abort(grpc.StatusCode.NOT_FOUND, "Document not found.")

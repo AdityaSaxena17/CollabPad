@@ -19,7 +19,6 @@ import {
   Cloud,
   CloudOff,
   Highlighter,
-  History,
   IndentIncrease,
   Italic,
   Link2,
@@ -42,6 +41,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   useEffect,
+  useRef,
   useState,
   type FormEvent,
   type MouseEvent as ReactMouseEvent,
@@ -136,8 +136,33 @@ function ToolbarButton({
 }
 
 function EditorMenu({ label, children }: EditorMenuProps) {
+  const menuRef = useRef<HTMLDetailsElement>(null);
+
+  // <details> stays open until toggled again; close it on outside clicks and Escape.
+  useEffect(() => {
+    function close() {
+      menuRef.current?.removeAttribute("open");
+    }
+    function onPointerDown(event: PointerEvent) {
+      const menu = menuRef.current;
+      if (menu?.open && !menu.contains(event.target as Node)) close();
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      const menu = menuRef.current;
+      if (event.key !== "Escape" || !menu?.open) return;
+      close();
+      menu.querySelector("summary")?.focus();
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
   return (
-    <details className="editor-menu relative">
+    <details ref={menuRef} className="editor-menu relative">
       <summary className="rounded px-2 py-1 text-sm text-[#3c4043] outline-none hover:bg-[#e8eaed] focus-visible:ring-2 focus-visible:ring-[#1a73e8]">
         {label}
       </summary>
@@ -569,15 +594,9 @@ export function DocumentEditor({
               )}
             </div>
           ) : null}
-          <button
-            type="button"
-            disabled
-            title="Version history requires the Raft-backed service"
-            aria-label="Version history requires the backend"
-            className="hidden size-9 place-items-center rounded-full text-[#9aa0a6] disabled:cursor-not-allowed md:grid"
-          >
-            <History aria-hidden="true" size={19} />
-          </button>
+          {isOwner && (
+            <DocumentVersionHistory documentId={document.id} ownerId={document.ownerId} disabled={!historyEnabled} />
+          )}
           <button
             type="button"
             disabled={status !== "connected" || !formatting?.wordCount}
@@ -600,7 +619,6 @@ export function DocumentEditor({
             <span className="hidden sm:inline">Enhance</span>
             <span className="sr-only sm:hidden">Enhance selected writing</span>
           </button>
-          {isOwner && historyEnabled && <DocumentVersionHistory documentId={document.id} ownerId={document.ownerId} />}
           <button
             type="button"
             disabled={!isOwner}
