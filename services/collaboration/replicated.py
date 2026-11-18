@@ -137,7 +137,7 @@ class ReplicatedCollaboration(rpc.CollaborationServiceServicer):
     async def _history_document(self, request, context):
         await self._require_user(request.user_id, context)
         document_id = await self._uuid(request.document_id, context)
-        await self._propose(context)
+        await self._read_barrier(context)
         document = self.documents.get(document_id)
         if document is None or document.metadata.owner_id != request.user_id:
             await context.abort(grpc.StatusCode.NOT_FOUND, "Document not found.")
@@ -161,23 +161,28 @@ class ReplicatedCollaboration(rpc.CollaborationServiceServicer):
             update=self._version_update(document, request.revision),
         )
 
-    async def _propose(self, context, kind="", actor="", document_id="", operation_id="", **payload):
+    async def _read_barrier(self, context):
+        try:
+            await self.node.read_barrier()
+        except LeaderUnavailable:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "Raft leader unavailable.")
+
+    async def _propose(self, context, kind, actor, document_id, operation_id, **payload):
         command = {
             "kind": kind, "actor": actor, "document_id": document_id,
             "operation_id": operation_id, "time": datetime.now(UTC).isoformat(), **payload,
         }
         try:
-            index = await self.node.propose(json.dumps(command).encode() if kind else b"")
+            index = await self.node.propose(json.dumps(command).encode())
         except LeaderUnavailable:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "Raft leader unavailable.")
-        if kind:
-            previous, error, original_index = self.operations[operation_id]
-            ignored = {"time", "update"} if kind == "create" else {"time"}
-            if any(previous.get(key) != value for key, value in command.items() if key not in ignored):
-                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Operation ID already used.")
-            if error is not None:
-                await context.abort(error, "Document operation rejected.")
-            return original_index == index
+        previous, error, original_index = self.operations[operation_id]
+        ignored = {"time", "update"} if kind == "create" else {"time"}
+        if any(previous.get(key) != value for key, value in command.items() if key not in ignored):
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Operation ID already used.")
+        if error is not None:
+            await context.abort(error, "Document operation rejected.")
+        return original_index == index
 
     @staticmethod
     async def _uuid(value, context):
@@ -230,7 +235,7 @@ class ReplicatedCollaboration(rpc.CollaborationServiceServicer):
 
     async def ListDocuments(self, request, context):
         await self._require_user(request.user_id, context)
-        await self._propose(context)
+        await self._read_barrier(context)
         return pb.ListDocumentsResponse(documents=sorted(
             (doc.metadata for doc in self.documents.values() if doc.metadata.owner_id == request.user_id),
             key=lambda meta: (meta.updated_at, meta.id), reverse=True,
@@ -239,7 +244,7 @@ class ReplicatedCollaboration(rpc.CollaborationServiceServicer):
     async def GetDocument(self, request, context):
         await self._require_user(request.user_id, context)
         document_id = await self._uuid(request.document_id, context)
-        await self._propose(context)
+        await self._read_barrier(context)
         document = self.documents.get(document_id)
         if not self._allowed(document, request.user_id):
             await context.abort(grpc.StatusCode.NOT_FOUND, "Document not found.")
@@ -260,7 +265,7 @@ class ReplicatedCollaboration(rpc.CollaborationServiceServicer):
         actor = first.join.user_id
         await self._require_user(actor, context)
         document_id = await self._uuid(first.join.document_id, context)
-        await self._propose(context)
+        await self._read_barrier(context)
         document = self.documents.get(document_id)
         if not self._allowed(document, actor):
             await context.abort(grpc.StatusCode.NOT_FOUND, "Document not found.")

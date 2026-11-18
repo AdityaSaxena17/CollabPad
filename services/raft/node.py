@@ -43,6 +43,8 @@ class RaftNode(rpc.RaftServiceServicer):
         self.applied = 0
         self.match: dict[str, int] = {}
         self.next_index: dict[str, int] = {}
+        self.rounds_started = 0
+        self.rounds_confirmed = 0
         self.changed = asyncio.Condition()
         self.wake = asyncio.Event()
         self.loop = asyncio.get_running_loop()
@@ -150,6 +152,41 @@ class RaftNode(rpc.RaftServiceServicer):
                 raise LeaderUnavailable()
             return entry.index
 
+    async def read_barrier(self, timeout: float = 3) -> None:
+        """Wait until local state reflects every write committed before this call.
+
+        Uses Raft's ReadIndex: record the commit index, confirm leadership with a
+        fresh heartbeat quorum, then wait for the state machine to apply that
+        index. Unlike a proposed no-op, it appends nothing to the log.
+        """
+        async with self.changed:
+            if self.role != "leader":
+                raise LeaderUnavailable()
+            term = self.storage.state().term
+
+            def deposed():
+                return self.role != "leader" or self.storage.state().term != term
+
+            try:
+                async with asyncio.timeout(timeout):
+                    # A new leader knows the full committed prefix only after
+                    # committing its election entry from the current term.
+                    await self.changed.wait_for(
+                        lambda: deposed() or self.storage.term_at(self.storage.state().commit_index) == term
+                    )
+                    if deposed():
+                        raise LeaderUnavailable()
+                    read_index = self.storage.state().commit_index
+                    target = self.rounds_started + 1
+                    self.wake.set()
+                    await self.changed.wait_for(
+                        lambda: deposed() or (self.rounds_confirmed >= target and self.applied >= read_index)
+                    )
+            except TimeoutError as error:
+                raise LeaderUnavailable() from error
+            if deposed():
+                raise LeaderUnavailable()
+
     async def _elect(self):
         async with self.changed:
             if self.role == "leader" or self.loop.time() < self.deadline:
@@ -221,6 +258,8 @@ class RaftNode(rpc.RaftServiceServicer):
 
     async def _replication_round(self):
         term = self.storage.state().term
+        self.rounds_started += 1
+        round_id = self.rounds_started
         replies = await asyncio.gather(
             *(self._replicate(peer_id, peer, term) for peer_id, peer in self.peers.items())
         )
@@ -229,6 +268,8 @@ class RaftNode(rpc.RaftServiceServicer):
                 return
             if 1 + sum(replies) >= self.quorum:
                 self._reset_deadline()
+                self.rounds_confirmed = max(self.rounds_confirmed, round_id)
+                self.changed.notify_all()
             elif self.loop.time() >= self.deadline:
                 self._follow(term)
                 return
