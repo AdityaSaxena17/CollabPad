@@ -37,7 +37,7 @@ class ClusterClient:
         return self.leader
 
     async def _call(self, method, request, timeout):
-        if method in ("CreateDocument", "SetSharing") and not request.operation_id:
+        if method in ("CreateDocument", "SetSharing", "DeleteDocument") and not request.operation_id:
             request.operation_id = str(uuid4())
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
@@ -70,6 +70,9 @@ class ClusterClient:
 
     async def SetSharing(self, request, timeout=5):
         return await self._call("SetSharing", request, timeout)
+
+    async def DeleteDocument(self, request, timeout=5):
+        return await self._call("DeleteDocument", request, timeout)
 
     async def ImportDocument(self, request, timeout=5):
         return await self._call("ImportDocument", request, timeout)

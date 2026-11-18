@@ -7,6 +7,7 @@ service CollaborationService {
   rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse);
   rpc GetDocument(GetDocumentRequest) returns (Document);
   rpc SetSharing(SetSharingRequest) returns (Document);
+  rpc DeleteDocument(DeleteDocumentRequest) returns (DeleteDocumentResponse);
   rpc ImportDocument(ImportDocumentRequest) returns (Document);
   rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse);
   rpc GetVersion(GetVersionRequest) returns (DocumentVersion);
@@ -46,6 +47,14 @@ message SetSharingRequest {
   bool enabled = 3;
   string operation_id = 4;
 }
+
+message DeleteDocumentRequest {
+  string document_id = 1;
+  string user_id = 2;
+  string operation_id = 3;
+}
+
+message DeleteDocumentResponse {}
 
 message Join {
   string document_id = 1;
@@ -93,6 +102,8 @@ message TitleChanged {
 
 message AccessRevoked {}
 
+message DocumentDeleted {}
+
 message ServerEvent {
   oneof event {
     Snapshot snapshot = 1;
@@ -100,6 +111,7 @@ message ServerEvent {
     EditAcknowledgement acknowledgement = 3;
     TitleChanged title_changed = 4;
     AccessRevoked access_revoked = 5;
+    DocumentDeleted document_deleted = 6;
   }
 }
 

@@ -1,11 +1,11 @@
 "use client";
 
 import { UserButton, useAuth } from "@clerk/nextjs";
-import { Clock3, FilePlus2, FileText, Search } from "lucide-react";
+import { Clock3, FilePlus2, FileText, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { CollabMark } from "@/components/collab-mark";
-import { listDocuments, type DocumentRecord } from "@/lib/gateway";
+import { deleteDocument, listDocuments, type DocumentRecord } from "@/lib/gateway";
 
 const previewAccents = [
   "from-[#d2e3fc] to-[#e8f0fe]",
@@ -20,6 +20,8 @@ export function DocumentsDashboard() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -46,6 +48,22 @@ export function DocumentsDashboard() {
     void load();
     return () => { cancelled = true; };
   }, [getToken, isLoaded]);
+
+  async function removeDocument(document: DocumentRecord) {
+    if (!window.confirm(`Delete "${document.title}"? It will be removed for everyone and cannot be undone.`)) return;
+    setDeletingId(document.id);
+    setDeleteError("");
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Sign in to delete documents.");
+      await deleteDocument(document.id, token);
+      setDocuments((current) => current.filter((item) => item.id !== document.id));
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : "Could not delete the document.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   const filteredDocuments = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -88,6 +106,9 @@ export function DocumentsDashboard() {
 
       <section className="mx-auto max-w-[1080px] px-5 py-8 sm:px-8 sm:py-10">
         <h2 className="mb-6 text-lg font-medium">Recent documents</h2>
+        {deleteError && (
+          <div role="alert" className="mb-5 rounded-xl border border-[#f5c2c0] bg-[#fce8e6] p-4 text-sm text-[#a50e0e]">{deleteError}</div>
+        )}
         {loading ? (
           <p role="status" className="text-sm text-[#5f6368]">Loading documents…</p>
         ) : error ? (
@@ -95,7 +116,8 @@ export function DocumentsDashboard() {
         ) : filteredDocuments.length > 0 ? (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {filteredDocuments.map((document, index) => (
-              <Link key={document.id} href={`/documents/${document.id}`} className="group overflow-hidden rounded-lg border border-[#dadce0] bg-white outline-none transition hover:-translate-y-0.5 hover:border-[#a8c7fa] hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#1a73e8] focus-visible:ring-offset-3">
+              <div key={document.id} className="group relative">
+              <Link href={`/documents/${document.id}`} className="block overflow-hidden rounded-lg border border-[#dadce0] bg-white outline-none transition hover:-translate-y-0.5 hover:border-[#a8c7fa] hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#1a73e8] focus-visible:ring-offset-3">
                 <span className={`relative block aspect-[1.38] overflow-hidden border-b border-[#e0e3e7] bg-gradient-to-br ${previewAccents[index % previewAccents.length]} p-5`}>
                   <span className="mx-auto block h-full max-w-[170px] rounded-sm bg-white p-5 shadow-sm">
                     <span className="mb-3 block h-2 w-2/3 rounded bg-[#3c4043]/75" />
@@ -112,6 +134,17 @@ export function DocumentsDashboard() {
                   </span>
                 </span>
               </Link>
+              <button
+                type="button"
+                onClick={() => void removeDocument(document)}
+                disabled={deletingId === document.id}
+                aria-label={`Delete ${document.title}`}
+                title="Delete document"
+                className="absolute top-2 right-2 grid size-9 place-items-center rounded-full bg-white/90 text-[#5f6368] opacity-0 shadow-sm transition group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-[#fce8e6] hover:text-[#c5221f] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#1a73e8] disabled:cursor-wait disabled:opacity-60 max-sm:opacity-100"
+              >
+                <Trash2 aria-hidden="true" size={17} />
+              </button>
+              </div>
             ))}
           </div>
         ) : (

@@ -35,6 +35,7 @@ function renderEditor(isOwner = true) {
       isOwner={isOwner}
       onRename={onRename}
       onSetSharing={onSetSharing}
+      onDelete={vi.fn().mockResolvedValue(undefined)}
     />,
   );
   return { onSetSharing, onRename, awareness, sharedDocument };

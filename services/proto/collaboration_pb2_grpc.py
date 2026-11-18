@@ -54,6 +54,11 @@ class CollaborationServiceStub:
                 request_serializer=services_dot_proto_dot_collaboration__pb2.SetSharingRequest.SerializeToString,
                 response_deserializer=services_dot_proto_dot_collaboration__pb2.Document.FromString,
                 _registered_method=True)
+        self.DeleteDocument = channel.unary_unary(
+                '/collabdocs.v1.CollaborationService/DeleteDocument',
+                request_serializer=services_dot_proto_dot_collaboration__pb2.DeleteDocumentRequest.SerializeToString,
+                response_deserializer=services_dot_proto_dot_collaboration__pb2.DeleteDocumentResponse.FromString,
+                _registered_method=True)
         self.ImportDocument = channel.unary_unary(
                 '/collabdocs.v1.CollaborationService/ImportDocument',
                 request_serializer=services_dot_proto_dot_collaboration__pb2.ImportDocumentRequest.SerializeToString,
@@ -98,6 +103,12 @@ class CollaborationServiceServicer:
         raise NotImplementedError('Method not implemented!')
 
     def SetSharing(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteDocument(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -149,6 +160,11 @@ def add_CollaborationServiceServicer_to_server(servicer, server):
                     servicer.SetSharing,
                     request_deserializer=services_dot_proto_dot_collaboration__pb2.SetSharingRequest.FromString,
                     response_serializer=services_dot_proto_dot_collaboration__pb2.Document.SerializeToString,
+            ),
+            'DeleteDocument': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteDocument,
+                    request_deserializer=services_dot_proto_dot_collaboration__pb2.DeleteDocumentRequest.FromString,
+                    response_serializer=services_dot_proto_dot_collaboration__pb2.DeleteDocumentResponse.SerializeToString,
             ),
             'ImportDocument': grpc.unary_unary_rpc_method_handler(
                     servicer.ImportDocument,
@@ -279,6 +295,33 @@ class CollaborationService:
             '/collabdocs.v1.CollaborationService/SetSharing',
             services_dot_proto_dot_collaboration__pb2.SetSharingRequest.SerializeToString,
             services_dot_proto_dot_collaboration__pb2.Document.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteDocument(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/collabdocs.v1.CollaborationService/DeleteDocument',
+            services_dot_proto_dot_collaboration__pb2.DeleteDocumentRequest.SerializeToString,
+            services_dot_proto_dot_collaboration__pb2.DeleteDocumentResponse.FromString,
             options,
             channel_credentials,
             insecure,

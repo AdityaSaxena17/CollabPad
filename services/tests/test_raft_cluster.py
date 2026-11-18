@@ -152,3 +152,33 @@ class RaftClusterTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(node.storage.tip()[0], tip)
         self.assertEqual(node.storage.state().commit_index, commit)
+
+    async def test_owner_deletes_document_and_open_editors_are_closed(self):
+        await self.leader()
+        owner, guest = "owner", "guest"
+        document = await self.client.CreateDocument(pb.CreateDocumentRequest(user_id=owner))
+        await self.client.SetSharing(pb.SetSharingRequest(document_id=document.id, user_id=owner, enabled=True))
+        stream = await self.client.open_sync()
+        self.addCleanup(stream.cancel)
+        await stream.write(pb.ClientEvent(join=pb.Join(document_id=document.id, user_id=guest)))
+        self.assertTrue((await asyncio.wait_for(stream.read(), timeout=5)).HasField("snapshot"))
+
+        with self.assertRaises(grpc.aio.AioRpcError) as denied:
+            await self.client.DeleteDocument(pb.DeleteDocumentRequest(document_id=document.id, user_id=guest))
+        self.assertEqual(denied.exception.code(), grpc.StatusCode.NOT_FOUND)
+
+        request = pb.DeleteDocumentRequest(document_id=document.id, user_id=owner)
+        await self.client.DeleteDocument(request)
+        self.assertTrue((await asyncio.wait_for(stream.read(), timeout=5)).HasField("document_deleted"))
+        # A retry with the same operation ID (e.g. after a leader change) succeeds.
+        await self.client.DeleteDocument(request)
+
+        listed = await self.client.ListDocuments(pb.ListDocumentsRequest(user_id=owner))
+        self.assertNotIn(document.id, [item.id for item in listed.documents])
+        with self.assertRaises(grpc.aio.AioRpcError) as missing:
+            await self.client.GetDocument(pb.GetDocumentRequest(document_id=document.id, user_id=owner))
+        self.assertEqual(missing.exception.code(), grpc.StatusCode.NOT_FOUND)
+        for name, (node, app) in self.replicas.items():
+            async with asyncio.timeout(3):
+                while document.id in app.documents:
+                    await asyncio.sleep(0.025)
